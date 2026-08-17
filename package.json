@@ -14,7 +14,10 @@
     "db:diff": "supabase db diff --linked",
     "db:new": "supabase migration new",
     "db:seed": "supabase db push --include-seed",
-    "db:types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts"
+    "db:types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts",
+
+    "db:demo": "supabase db query --linked --file supabase/seed_demo.sql",
+    "db:demo:clear": "supabase db query --linked --file supabase/seed_demo_clear.sql"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.6.1",

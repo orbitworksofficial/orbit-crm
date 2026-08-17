@@ -105,12 +105,45 @@ tidying.
 
 ---
 
+## Demo data
+
+Two kinds of data live in `supabase/`, and they are kept separate on purpose:
+
+- **`seed.sql`** — reference data the app needs to function: the organization,
+  lead sources, statuses, and the service catalogue. This is production
+  configuration.
+- **`seed_demo.sql`** — sample contacts, deals, invoices, and notes for testing
+  and for demonstrating the CRM. Never loaded automatically.
+
+```bash
+npm run db:demo         # load sample records
+npm run db:demo:clear   # remove them, leaving reference data intact
+```
+
+The demo set contains 16 contacts spread realistically across the funnel,
+8 deals (open, won, and lost), 6 invoices covering every status including a
+derived *overdue*, and 21 notes with next-action reminders.
+
+Dates are relative to `now()`, so whenever it is loaded the dashboard's Today,
+This Week, and Last 30 Days filters all have something to show. A demo where
+every headline figure reads zero demonstrates nothing.
+
+Removal is exact: `seed_demo.sql` records every row it creates in a
+`demo_data_marker` table, and the clear script deletes only those. Records
+entered through the app are never touched. **Before going live, run
+`npm run db:demo:clear`** — it also resets invoice numbering so your first real
+invoice is `INV-0001`.
+
+---
+
 ## Command reference
 
 | Command | Does |
 |---|---|
 | `npm run db:push` | Apply pending migrations to the live database |
 | `npm run db:seed` | Apply migrations **and** re-run `seed.sql` |
+| `npm run db:demo` | Load sample records for testing/demos |
+| `npm run db:demo:clear` | Remove sample records |
 | `npm run db:new <name>` | Create an empty timestamped migration |
 | `npm run db:status` | List which migrations have run |
 | `npm run db:diff` | Show live-vs-files drift |

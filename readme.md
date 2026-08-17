@@ -71,6 +71,22 @@ The CLI is preferable because it records what has run, so you can't
 double-apply or skip a file.
 </details>
 
+### 3b. Load demo data (optional)
+
+```bash
+npm run db:demo
+```
+
+16 contacts across the funnel, 8 deals, 6 invoices covering every status, and
+notes with reminders — enough to see every screen populated. Dates are relative
+to now, so all dashboard filters have something to show.
+
+Remove it before going live:
+
+```bash
+npm run db:demo:clear
+```
+
 ### 4. Create the first admin
 
 Supabase Dashboard → **Authentication → Users → Add user**. The
