@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SidebarNav } from './Sidebar';
+import { Logo } from './Logo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { cn, getInitials } from '@/lib/utils';
 import type { Profile } from '@/lib/supabase/database.types';
@@ -26,14 +27,13 @@ export function AppShell({
   const pathname = usePathname();
 
   const brand = (
-    <Link href="/dashboard" className="flex items-center gap-2 px-1" onClick={() => setDrawerOpen(false)}>
-      <span
-        className="size-7 rounded-lg bg-[var(--primary)] flex items-center justify-center text-[var(--primary-foreground)] text-[11px] font-bold shrink-0"
-        aria-hidden="true"
-      >
-        OW
-      </span>
-      <span className="font-semibold text-sm truncate">Orbit Works</span>
+    <Link
+      href="/dashboard"
+      className="flex items-center min-w-0 flex-1"
+      onClick={() => setDrawerOpen(false)}
+      aria-label="Orbit Works — go to dashboard"
+    >
+      <Logo variant="bar" className="w-full" />
     </Link>
   );
 
@@ -95,12 +95,12 @@ export function AppShell({
             aria-label="Close navigation menu"
           />
           <aside className="absolute inset-y-0 left-0 w-64 bg-[var(--surface-raised)] border-r border-[var(--border-subtle)] p-3 flex flex-col shadow-xl">
-            <div className="h-12 flex items-center justify-between">
+            <div className="h-12 flex items-center justify-between gap-2">
               {brand}
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                className="size-9 inline-flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)]"
+                className="size-9 shrink-0 inline-flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)]"
                 aria-label="Close navigation menu"
               >
                 <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -131,7 +131,7 @@ export function AppShell({
                 <path d="M3 6h18M3 12h18M3 18h18" strokeLinecap="round" />
               </svg>
             </button>
-            <span className="lg:hidden font-semibold text-sm">Orbit Works</span>
+            <Logo variant="bar" className="lg:hidden" />
           </div>
           <ThemeToggle />
         </header>

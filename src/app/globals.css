@@ -30,15 +30,21 @@
   --border-subtle: #e2e8f0;
   --border-strong: #cbd5e1;
 
-  /* Brand accents */
+  /* Brand accents.
+     --brand is the exact pink sampled from public/logo.png. It is used for
+     decorative marks and rules, never behind small white text: white on
+     #fb093b measures 4.04:1, under the 4.5:1 needed for body-size labels.
+     --primary is a slightly deeper step of the same hue that clears it, so
+     buttons stay on-brand and legible. */
+  --brand: #fb093b;
   --accent-pink: #e81e5a;
   --accent-blue: #2563eb;
   --accent-amber: #f59e0b;
   --accent-green: #10b981;
 
   /* Primary action colour */
-  --primary: #e81e5a;
-  --primary-hover: #c8184c;
+  --primary: #d81a55;
+  --primary-hover: #b81447;
   --primary-foreground: #ffffff;
 
   /* Semantic status colours */
@@ -81,13 +87,17 @@
   --border-subtle: #1f2b45;
   --border-strong: #30405f;
 
+  /* --brand stays the literal logo pink for decorative use. --primary is a
+     step deeper so white button labels clear 4.5:1 (#ff2d6b measured only
+     3.60:1 against white text — legible as a mark, not as a button). */
+  --brand: #fb093b;
   --accent-pink: #ff2d6b;
   --accent-blue: #3b82f6;
   --accent-amber: #fbbf24;
   --accent-green: #34d399;
 
-  --primary: #ff2d6b;
-  --primary-hover: #ff5285;
+  --primary: #e01050;
+  --primary-hover: #f5326c;
   --primary-foreground: #ffffff;
 
   /* Status colours re-tuned for dark surfaces: brighter text, dim translucent

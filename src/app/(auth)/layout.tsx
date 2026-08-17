@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Logo } from '@/components/layout/Logo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 /**
@@ -13,16 +14,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </div>
       <div className="flex-1 flex items-center justify-center px-4 pb-16">
         <div className="w-full max-w-sm">
-          <div className="mb-8 text-center">
-            <div className="inline-flex items-center gap-2 mb-2">
-              <span
-                className="size-7 rounded-lg bg-[var(--primary)] flex items-center justify-center text-[var(--primary-foreground)] text-xs font-bold"
-                aria-hidden="true"
-              >
-                OW
-              </span>
-              <span className="text-lg font-semibold">Orbit Works</span>
-            </div>
+          <div className="mb-8 flex flex-col items-center text-center gap-3">
+            <Logo variant="full" priority />
             <p className="text-sm text-[var(--text-secondary)]">Customer Relationship Manager</p>
           </div>
           {children}

@@ -72,7 +72,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 28,
   },
-  logo: { width: 96, maxHeight: 40, objectFit: 'contain' },
+  // `objectFit: contain` keeps a square mark and a wide lockup both undistorted
+  // within the same box.
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
+  logo: { width: 34, height: 34, objectFit: 'contain' },
   companyName: { fontSize: 15, fontFamily: 'Helvetica-Bold', color: COLORS.ink },
   companyMeta: { fontSize: 8, color: COLORS.secondary, marginTop: 2 },
 
@@ -189,12 +192,15 @@ export function InvoiceDocument({ data }: { data: InvoicePdfData }) {
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View>
-            {data.company.logoUrl ? (
-              // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image takes no alt
-              <Image style={styles.logo} src={data.company.logoUrl} />
-            ) : (
+            {/* Mark and name sit together: the mark alone would not identify the
+                business on a printed invoice. */}
+            <View style={styles.logoRow}>
+              {data.company.logoUrl && (
+                // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image takes no alt
+                <Image style={styles.logo} src={data.company.logoUrl} />
+              )}
               <Text style={styles.companyName}>{data.company.name}</Text>
-            )}
+            </View>
             {data.company.websiteUrl && (
               <Text style={styles.companyMeta}>{data.company.websiteUrl}</Text>
             )}

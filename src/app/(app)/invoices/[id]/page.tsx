@@ -51,9 +51,12 @@ export default async function InvoiceDetailPage({
   ]);
 
   // Resolve a public URL for the logo so @react-pdf can fetch it in the browser.
+  // Falls back to the bundled Orbit Works mark when Settings has no upload, so
+  // an invoice is never unbranded. `/logo-mark.png` resolves against the site
+  // origin, since the PDF is generated client-side.
   const logoUrl = organization?.logo_path
     ? supabase.storage.from('branding').getPublicUrl(organization.logo_path).data.publicUrl
-    : null;
+    : '/logo-mark.png';
 
   // Assembled server-side so the client component receives plain, serialisable
   // data and never needs its own queries.
