@@ -1,0 +1,352 @@
+/**
+ * Database types for the Orbit Works CRM Supabase schema.
+ *
+ * These mirror `supabase/migrations/*.sql`. Once the project is linked, they can
+ * be regenerated with:
+ *
+ *   npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
+ *
+ * Keep this file in sync with the migrations — it is the single source of truth
+ * for every typed query in the application.
+ */
+
+export type UserRole = 'admin' | 'sales';
+export type DealStatus = 'open' | 'won' | 'lost';
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void';
+
+/** Derived status shown in the UI. `overdue` is computed, never stored. */
+export type InvoiceDisplayStatus = InvoiceStatus | 'overdue';
+
+export type Organization = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_path: string | null;
+  website_url: string | null;
+  contact_email: string | null;
+  invoice_prefix: string;
+  invoice_next_number: number;
+  default_currency: string;
+  default_payment_terms_days: number;
+  default_tax_rate: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type Profile = {
+  id: string;
+  organization_id: string;
+  full_name: string;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type LeadSource = {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export type LeadStatus = {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  is_won: boolean;
+  is_lost: boolean;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export type Service = {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  default_rate: number | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type Contact = {
+  id: string;
+  organization_id: string;
+  full_name: string;
+  email: string | null;
+  whatsapp_number: string | null;
+  company_name: string | null;
+  industry: string | null;
+  city: string | null;
+  country: string | null;
+  lead_source_id: string | null;
+  lead_status_id: string | null;
+  assigned_to: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  external_ref: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type Deal = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  title: string;
+  value: number;
+  currency: string;
+  status: DealStatus;
+  expected_close_date: string | null;
+  closed_at: string | null;
+  assigned_to: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type Note = {
+  id: string;
+  organization_id: string;
+  contact_id: string | null;
+  deal_id: string | null;
+  body: string;
+  next_action_at: string | null;
+  next_action_description: string | null;
+  author_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ActivityLogEntry = {
+  id: string;
+  organization_id: string;
+  contact_id: string | null;
+  deal_id: string | null;
+  event_type: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  actor_id: string | null;
+  created_at: string;
+}
+
+export type Invoice = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  deal_id: string | null;
+  invoice_number: string;
+  status: InvoiceStatus;
+  issue_date: string;
+  due_date: string;
+  paid_at: string | null;
+  currency: string;
+  tax_rate: number;
+  notes: string | null;
+  payment_terms: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Row shape of the `invoices_with_status` view: invoice plus computed money.
+ *
+ * Declared as an intersection rather than an interface because supabase-js
+ * constrains schema entries to `Record<string, unknown>`, which interfaces do
+ * not satisfy (they lack an implicit index signature). The same applies to the
+ * row types above and the composed shapes below.
+ */
+export type InvoiceWithStatus = Invoice & {
+  display_status: InvoiceDisplayStatus;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+};
+
+export type InvoiceLineItem = {
+  id: string;
+  invoice_id: string;
+  service_id: string | null;
+  name: string;
+  description: string | null;
+  quantity: number;
+  rate: number;
+  sort_order: number;
+  created_at: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Composed shapes returned by joined queries                                  */
+/* -------------------------------------------------------------------------- */
+
+export type ContactWithRelations = Contact & {
+  lead_source: Pick<LeadSource, 'id' | 'name' | 'slug'> | null;
+  lead_status: Pick<LeadStatus, 'id' | 'name' | 'slug' | 'is_won' | 'is_lost'> | null;
+  assignee: Pick<Profile, 'id' | 'full_name'> | null;
+  services: Pick<Service, 'id' | 'name'>[];
+};
+
+export type DealWithRelations = Deal & {
+  contact: Pick<Contact, 'id' | 'full_name' | 'company_name'> | null;
+  assignee: Pick<Profile, 'id' | 'full_name'> | null;
+  services: Pick<Service, 'id' | 'name'>[];
+};
+
+export type InvoiceWithRelations = InvoiceWithStatus & {
+  contact: Pick<Contact, 'id' | 'full_name' | 'company_name' | 'email'> | null;
+  line_items: InvoiceLineItem[];
+};
+
+export type NoteWithAuthor = Note & {
+  author: Pick<Profile, 'id' | 'full_name'> | null;
+};
+
+/**
+ * Table entry shape expected by supabase-js.
+ *
+ * `Relationships` mirrors the actual foreign keys in the migrations. The client
+ * uses it to type embedded resources (`select('*, contact:contacts(...)')`), so
+ * an entry missing here surfaces as a "could not find the relation" type error
+ * at the call site rather than at runtime.
+ */
+type TableDef<Row, Rels extends readonly unknown[] = []> = {
+  Row: Row;
+  Insert: Partial<Row>;
+  Update: Partial<Row>;
+  Relationships: Rels;
+};
+
+/** Declares one foreign key: `Col` on this table → `Ref`.`RefCol`. */
+type FK<Name extends string, Col extends string, Ref extends string, RefCol extends string = 'id'> = {
+  foreignKeyName: Name;
+  columns: [Col];
+  isOneToOne: false;
+  referencedRelation: Ref;
+  referencedColumns: [RefCol];
+};
+
+type ContactServiceRow = { contact_id: string; service_id: string };
+type DealServiceRow = { deal_id: string; service_id: string };
+
+export interface Database {
+  public: {
+    Tables: {
+      organizations: TableDef<Organization>;
+      profiles: TableDef<
+        Profile,
+        [FK<'profiles_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
+      lead_sources: TableDef<
+        LeadSource,
+        [FK<'lead_sources_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
+      lead_statuses: TableDef<
+        LeadStatus,
+        [FK<'lead_statuses_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
+      services: TableDef<
+        Service,
+        [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
+      contacts: TableDef<
+        Contact,
+        [
+          FK<'contacts_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'contacts_lead_source_id_fkey', 'lead_source_id', 'lead_sources'>,
+          FK<'contacts_lead_status_id_fkey', 'lead_status_id', 'lead_statuses'>,
+          FK<'contacts_assigned_to_fkey', 'assigned_to', 'profiles'>,
+          FK<'contacts_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
+      contact_services: TableDef<
+        ContactServiceRow,
+        [
+          FK<'contact_services_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'contact_services_service_id_fkey', 'service_id', 'services'>,
+        ]
+      >;
+      deals: TableDef<
+        Deal,
+        [
+          FK<'deals_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'deals_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'deals_assigned_to_fkey', 'assigned_to', 'profiles'>,
+          FK<'deals_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
+      deal_services: TableDef<
+        DealServiceRow,
+        [
+          FK<'deal_services_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'deal_services_service_id_fkey', 'service_id', 'services'>,
+        ]
+      >;
+      notes: TableDef<
+        Note,
+        [
+          FK<'notes_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'notes_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'notes_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'notes_author_id_fkey', 'author_id', 'profiles'>,
+        ]
+      >;
+      activity_log: TableDef<
+        ActivityLogEntry,
+        [
+          FK<'activity_log_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'activity_log_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'activity_log_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'activity_log_actor_id_fkey', 'actor_id', 'profiles'>,
+        ]
+      >;
+      invoices: TableDef<
+        Invoice,
+        [
+          FK<'invoices_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'invoices_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'invoices_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'invoices_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
+      invoice_line_items: TableDef<
+        InvoiceLineItem,
+        [
+          FK<'invoice_line_items_invoice_id_fkey', 'invoice_id', 'invoices'>,
+          FK<'invoice_line_items_service_id_fkey', 'service_id', 'services'>,
+        ]
+      >;
+    };
+    Views: {
+      invoices_with_status: {
+        Row: InvoiceWithStatus;
+        Relationships: [];
+      };
+    };
+    Functions: {
+      next_invoice_number: { Args: { p_organization_id: string }; Returns: string };
+      current_org_id: { Args: Record<string, never>; Returns: string };
+      is_admin: { Args: Record<string, never>; Returns: boolean };
+      set_user_role: { Args: { p_user_id: string; p_role: UserRole }; Returns: undefined };
+      set_user_active: { Args: { p_user_id: string; p_is_active: boolean }; Returns: undefined };
+    };
+    Enums: {
+      user_role: UserRole;
+      deal_status: DealStatus;
+      invoice_status: InvoiceStatus;
+    };
+    CompositeTypes: Record<string, never>;
+  };
+}

@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Orbit Works CRM — Design Tokens
+   ==========================================================================
+   Palette derives from the Orbit Works brief: near-black navy surfaces with
+   pink, blue, amber, and green accents used to distinguish modules.
+
+   Dark mode is class-based (`.dark` on <html>) rather than media-only, because
+   Settings exposes an explicit user preference. `prefers-color-scheme` seeds
+   the initial value; see ThemeScript in layout.tsx.
+   ========================================================================== */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Surfaces, from lowest to highest elevation */
+  --surface-base: #f8fafc;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #f1f5f9;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-inverse: #ffffff;
+
+  /* Borders */
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  /* Brand accents */
+  --accent-pink: #e81e5a;
+  --accent-blue: #2563eb;
+  --accent-amber: #f59e0b;
+  --accent-green: #10b981;
+
+  /* Primary action colour */
+  --primary: #e81e5a;
+  --primary-hover: #c8184c;
+  --primary-foreground: #ffffff;
+
+  /* Semantic status colours */
+  --success: #059669;
+  --success-bg: #d1fae5;
+  --warning: #d97706;
+  --warning-bg: #fef3c7;
+  --danger: #dc2626;
+  --danger-bg: #fee2e2;
+  --info: #2563eb;
+  --info-bg: #dbeafe;
+  --neutral: #475569;
+  --neutral-bg: #f1f5f9;
+
+  --ring: #e81e5a;
+
+  /* Chart marks.
+     Validated with the dataviz palette checker against surface #ffffff:
+     lightness band, chroma floor, CVD separation, and normal-vision floor all
+     PASS. Contrast WARNs on amber/green, which is why every bar in this app is
+     direct-labelled — the label is the required relief channel, not decoration. */
+  --chart-1: #2563eb;
+  --chart-2: #e81e5a;
+  --chart-3: #f59e0b;
+  --chart-4: #10b981;
+  --chart-track: #eef2f7;
+}
+
+.dark {
+  --surface-base: #0b1120;
+  --surface-raised: #131c31;
+  --surface-overlay: #1a2439;
+  --surface-sunken: #070c17;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #a3b1c6;
+  --text-muted: #6b7c93;
+  --text-inverse: #0f172a;
+
+  --border-subtle: #1f2b45;
+  --border-strong: #30405f;
+
+  --accent-pink: #ff2d6b;
+  --accent-blue: #3b82f6;
+  --accent-amber: #fbbf24;
+  --accent-green: #34d399;
+
+  --primary: #ff2d6b;
+  --primary-hover: #ff5285;
+  --primary-foreground: #ffffff;
+
+  /* Status colours re-tuned for dark surfaces: brighter text, dim translucent
+     backgrounds that sit correctly on the navy rather than glowing. */
+  --success: #34d399;
+  --success-bg: #04331f;
+  --warning: #fbbf24;
+  --warning-bg: #372303;
+  --danger: #f87171;
+  --danger-bg: #3d1010;
+  --info: #60a5fa;
+  --info-bg: #10254a;
+  --neutral: #a3b1c6;
+  --neutral-bg: #1a2439;
+
+  --ring: #ff2d6b;
+
+  /* Dark-mode chart marks are re-stepped, not flipped: amber and green were
+     snapped down until they sat inside the dark lightness band (0.48–0.67)
+     against surface #131c31. All checks PASS; the CVD warn between amber and
+     pink sits in the 6–8 floor band, which direct labels make legal. */
+  --chart-1: #3b82f6;
+  --chart-2: #ff2d6b;
+  --chart-3: #c08400;
+  --chart-4: #149a6e;
+  --chart-track: #1a2439;
+}
+
+@theme inline {
+  --color-surface: var(--surface-base);
+  --color-raised: var(--surface-raised);
+  --color-overlay: var(--surface-overlay);
+  --color-sunken: var(--surface-sunken);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-content: var(--text-primary);
+  --color-content-secondary: var(--text-secondary);
+  --color-content-muted: var(--text-muted);
+
+  --color-edge: var(--border-subtle);
+  --color-edge-strong: var(--border-strong);
+
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-neutral: var(--neutral);
+  --color-neutral-bg: var(--neutral-bg);
+
+  --color-accent-pink: var(--accent-pink);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-amber: var(--accent-amber);
+  --color-accent-green: var(--accent-green);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  body {
+    background-color: var(--surface-base);
+    color: var(--text-primary);
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Consistent, visible focus for keyboard users across all interactive elements. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Tabular figures keep money and counts aligned in tables. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbars on horizontally-scrolling filter bars while keeping them
+     scrollable by touch and wheel. */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
