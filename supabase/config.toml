@@ -1,0 +1,45 @@
+# ============================================================================
+# Supabase CLI configuration
+# ============================================================================
+# Used by `npm run db:push` to apply migrations to the linked project.
+#
+# The [db], [auth], and [api] sections below configure a LOCAL Supabase stack
+# (`supabase start`), which needs Docker. Pushing migrations to the hosted
+# project does not need Docker or any of those services running.
+# ============================================================================
+
+project_id = "orbit-crm"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# Match the hosted project's major version, so anything that works locally
+# behaves the same way once pushed.
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+# Password-reset and invite links return here.
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_signup = false          # Users are invited by an admin, never self-signup.
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false   # Local only; the hosted project has its own setting.
+
+[storage]
+enabled = true
+file_size_limit = "2MiB"       # Matches the logo upload limit in the app.

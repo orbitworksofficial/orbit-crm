@@ -38,20 +38,38 @@ rejects every request, so an unset secret fails closed rather than open.
 
 ### 3. Apply the database schema
 
-In the Supabase SQL editor, run these in order:
+```bash
+npx supabase login     # opens a browser, paste the token back
+npm run db:link        # asks for your database password
+npm run db:seed        # applies all migrations + reference data
+```
 
-| Order | File | Contents |
-|-------|------|----------|
-| 1 | `supabase/migrations/0001_core_schema.sql` | Tables, enums, indexes |
-| 2 | `supabase/migrations/0002_functions_and_views.sql` | Triggers, helper functions, derived views |
-| 3 | `supabase/migrations/0003_rls_policies.sql` | Row Level Security |
-| 4 | `supabase/migrations/0004_storage.sql` | Logo storage bucket |
-| 5 | `supabase/seed.sql` | Organization, lead sources, statuses, services |
+That's it — `db:seed` runs the four migrations in order and loads the
+organization, lead sources, statuses, and services.
 
 > **Before seeding:** `supabase/seed.sql` contains **13 placeholder services**.
 > Replace the `name`, `description`, and `default_rate` values with the real
 > Orbit Works catalogue. Keep the `slug` values stable — the website form and
 > historical records reference them.
+
+From here on, any schema change is a new migration file plus `npm run db:push`.
+Never edit the live database through the dashboard — see
+[docs/DATABASE.md](docs/DATABASE.md) for the full workflow.
+
+<details>
+<summary>Prefer to paste SQL by hand?</summary>
+
+In the Supabase SQL Editor, run these in order:
+
+1. `supabase/migrations/20260817000001_core_schema.sql`
+2. `supabase/migrations/20260817000002_functions_and_views.sql`
+3. `supabase/migrations/20260817000003_rls_policies.sql`
+4. `supabase/migrations/20260817000004_storage.sql`
+5. `supabase/seed.sql`
+
+The CLI is preferable because it records what has run, so you can't
+double-apply or skip a file.
+</details>
 
 ### 4. Create the first admin
 
@@ -106,8 +124,25 @@ src/
 
 supabase/
 ├── migrations/              Schema, functions, RLS, storage
+├── config.toml              CLI configuration
 └── seed.sql                 Reference data
 ```
+
+## Database changes
+
+Schema lives in `supabase/migrations/` and is applied with the CLI, never by
+hand:
+
+```bash
+npm run db:new add_something   # create a migration
+# ...write the SQL...
+npm run db:push                # apply it to the live database
+npm run db:types               # regenerate TypeScript types
+```
+
+`npm run db:diff` reports drift — if it prints anything, someone changed the
+live database outside a migration. Full workflow in
+[docs/DATABASE.md](docs/DATABASE.md).
 
 ---
 
