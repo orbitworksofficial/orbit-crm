@@ -33,7 +33,7 @@ export function AppShell({
       onClick={() => setDrawerOpen(false)}
       aria-label="Orbit Works — go to dashboard"
     >
-      <Logo variant="bar" className="w-full" />
+      <Logo size="sm" />
     </Link>
   );
 
@@ -131,7 +131,7 @@ export function AppShell({
                 <path d="M3 6h18M3 12h18M3 18h18" strokeLinecap="round" />
               </svg>
             </button>
-            <Logo variant="bar" className="lg:hidden" />
+            <Logo size="sm" className="lg:hidden" />
           </div>
           <ThemeToggle />
         </header>

@@ -15,7 +15,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex items-center justify-center px-4 pb-16">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center text-center gap-3">
-            <Logo variant="full" priority />
+            <Logo size="lg" priority />
             <p className="text-sm text-[var(--text-secondary)]">Customer Relationship Manager</p>
           </div>
           {children}

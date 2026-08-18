@@ -8,58 +8,65 @@ derived assets are generated from it and committed alongside:
 | File | Size | Used for |
 |---|---|---|
 | `logo.png` | 1600×800 | Source of truth. Not rendered directly. |
+| `logo-full-light.png` | 1000×204 | Light theme — wordmark in `#0f172a` |
+| `logo-full-dark.png` | 1000×204 | Dark theme — wordmark in `#f1f5f9` |
 | `logo-mark.png` | 256×256 | Favicon, invoice PDF header |
-| `logo-full.png` | 1000×204 | Login screen, sidebar, mobile header |
 
-### Why two derivatives, not one
+### Why two recoloured versions
 
 In the source artwork **"Orbit" and the tagline are white**; only the orbital
-symbol and "Works" are pink. Dropped onto a light background, half the wordmark
+symbol and "Works" are pink. On a light background half the wordmark
 disappears.
 
-So the full lockup is **always** placed on a dark plate (`#0b1120`) — the ground
-it was drawn for. The plate is structural, not decorative; removing it makes
-half the wordmark disappear in light mode.
+The first attempt put the artwork on a dark plate. That worked, but a dark box
+around the logo reads as a mistake on a light page.
 
-`src/components/layout/Logo.tsx` encapsulates this as three variants. Nothing
-else should reference the image files directly.
+The fix is to recolour instead. The artwork separates cleanly — roughly 34,000
+pink pixels and 19,000 white ones, with almost nothing in between — so the
+white parts can be repainted per theme while the pink is left untouched. The
+result is a logo that sits directly on the page in both themes with no
+container at all.
 
-| Variant | Renders | Where |
+### How the swap works
+
+`Logo` renders **both** images and lets CSS show one (`dark:hidden` /
+`hidden dark:block`).
+
+That is deliberate. The viewer's theme is only known in the browser, so
+choosing a single file on the server would flash the wrong artwork on load and
+could never respond to the in-app theme toggle. The hidden image costs
+essentially nothing — browsers skip decoding `display: none` images — and the
+swap is instant.
+
+`dark:` here maps to the `.dark` class (see `@custom-variant` in
+`globals.css`), so it follows the toggle rather than only the OS setting.
+
+### The component
+
+`src/components/layout/Logo.tsx` is the only place that references these files.
+
+| Export | Renders | Where |
 |---|---|---|
-| `full` | Lockup on a plate, 36px tall | Login screen |
-| `bar` | Same lockup, 24px tall | Sidebar, drawer, mobile header |
-| `mark` | Orbital symbol + live text | Reserved for tight or light surfaces |
-
-`mark` exists as a fallback for places where a dark plate would be intrusive.
-It pairs the pink symbol — which reads on any surface — with the company name
-as live text that inherits the theme's ink colour. Nothing currently uses it in
-the chrome, but it is the right answer if a future surface cannot take a plate.
+| `<Logo size="lg">` | Full lockup, 36px | Login screen |
+| `<Logo size="sm">` | Full lockup, 24px | Sidebar, drawer, mobile header |
+| `<LogoMark>` | Orbital symbol alone | Tight surfaces; needs no theme variant |
 
 ### Regenerating the derivatives
 
-If a new `logo.png` is supplied, regenerate with:
+If a new `logo.png` is supplied:
 
-```js
-// node -e "...", with sharp (already present via Next.js)
-const sharp = require('sharp');
-
-// Orbital mark, square, transparent
-sharp('public/logo.png')
-  .extract({ left: 177, top: 239, width: 298, height: 249 })
-  .resize(256, 256, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } })
-  .png({ compressionLevel: 9 })
-  .toFile('public/logo-mark.png');
-
-// Full lockup, trimmed of transparent padding
-sharp('public/logo.png')
-  .extract({ left: 177, top: 239, width: 1270, height: 259 })
-  .resize({ width: 1000, withoutEnlargement: true })
-  .png({ compressionLevel: 9 })
-  .toFile('public/logo-full.png');
+```bash
+npm run logo:build
 ```
 
-The extract bounds were derived by scanning for non-transparent pixels; a
-differently-cropped source will need them recalculated.
+`scripts/build-logo.mjs` scans the source for non-transparent pixels to find
+the artwork bounds and the gap between symbol and wordmark, then writes all
+four derivatives plus the favicons. Because the bounds are measured rather than
+hardcoded, a differently-cropped source works without editing the script.
+
+If a version with a **dark or `currentColor` wordmark** is ever supplied, the
+recolouring step becomes unnecessary — point `Logo` at that file directly and
+delete the two `logo-full-*.png` variants.
 
 Favicons live at `src/app/icon.png` (32×32) and `src/app/apple-icon.png`
 (200×200 on the brand navy, since iOS composites over white). Next.js picks
