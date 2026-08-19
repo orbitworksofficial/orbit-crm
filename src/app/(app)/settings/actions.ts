@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createVerificationClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdmin, requireProfile } from '@/lib/auth';
 import { slugify } from '@/lib/utils';
 
 /**
@@ -342,6 +342,247 @@ export async function inviteUser(
 
   revalidatePath('/settings');
   return { success: `Invitation sent to ${parsed.data.email}.` };
+}
+
+/**
+ * Shared password rule.
+ *
+ * Eight characters is Supabase Auth's own floor. The mixed-case and digit
+ * requirements are ours: an admin typing a password on someone's behalf tends
+ * to reach for something short and obvious.
+ */
+const passwordField = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(72, 'Password must be 72 characters or fewer')
+  .refine((value) => /[a-z]/.test(value) && /[A-Z]/.test(value), {
+    message: 'Password must include both upper and lower case letters',
+  })
+  .refine((value) => /\d/.test(value), {
+    message: 'Password must include at least one number',
+  });
+
+const createUserSchema = z.object({
+  email: z.string().trim().email('Enter a valid email address'),
+  full_name: z.string().trim().min(1, 'Full name is required').max(200),
+  role: z.enum(['admin', 'sales']),
+  password: passwordField,
+});
+
+/**
+ * Creates a team member directly, with a password the admin sets (brief §09).
+ *
+ * The alternative flow, `inviteUser`, emails a link and lets the person choose
+ * their own password. This one exists for the case where an admin is setting
+ * someone up in person, or where email delivery is unreliable.
+ *
+ * `email_confirm: true` marks the address as verified, since an admin creating
+ * the account is the verification. Without it the user cannot sign in until
+ * they click a confirmation email that this flow never sends.
+ */
+export async function createUser(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireAdmin();
+
+  const parsed = createUserSchema.safeParse({
+    email: formData.get('email') ?? '',
+    full_name: formData.get('full_name') ?? '',
+    role: formData.get('role') ?? 'sales',
+    password: formData.get('password') ?? '',
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return {
+      error: 'Creating users requires SUPABASE_SERVICE_ROLE_KEY to be configured on the server.',
+    };
+  }
+
+  const { error } = await admin.auth.admin.createUser({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    email_confirm: true,
+    user_metadata: {
+      full_name: parsed.data.full_name,
+      role: parsed.data.role,
+      organization_id: profile.organization_id,
+    },
+  });
+
+  if (error) {
+    // Supabase reports a duplicate address in a few different shapes.
+    if (/already|exists|registered/i.test(error.message)) {
+      return { error: 'An account with that email address already exists.' };
+    }
+    return { error: `Could not create the user: ${error.message}` };
+  }
+
+  revalidatePath('/settings');
+  return {
+    success: `${parsed.data.full_name} can now sign in with ${parsed.data.email}.`,
+  };
+}
+
+/**
+ * Sets another user's password (admin only).
+ *
+ * Deliberately refuses the admin's own account: changing your own password
+ * should go through `changeOwnPassword`, which demands the current one. Without
+ * that split, an unattended logged-in session would be a full account takeover.
+ */
+export async function setUserPassword(
+  userId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireAdmin();
+
+  if (userId === profile.id) {
+    return {
+      error: 'To change your own password, use the Account page — it asks for your current password.',
+    };
+  }
+
+  const parsed = passwordField.safeParse(formData.get('password') ?? '');
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+
+  // Confirm the target is in the caller's organization before touching Auth.
+  // The admin client bypasses RLS, so this check is the boundary — without it,
+  // a crafted user id could reach an account in another organization once
+  // Phase 2 multi-tenancy lands.
+  const { data: target } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (!target) {
+    return { error: 'That user is not part of your organization.' };
+  }
+
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return {
+      error: 'Resetting passwords requires SUPABASE_SERVICE_ROLE_KEY to be configured on the server.',
+    };
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    password: parsed.data,
+  });
+
+  if (error) {
+    return { error: `Could not update the password: ${error.message}` };
+  }
+
+  revalidatePath('/settings');
+  return { success: `Password updated for ${target.full_name}.` };
+}
+
+const changePasswordSchema = z
+  .object({
+    current_password: z.string().min(1, 'Enter your current password'),
+    password: passwordField,
+    confirm_password: z.string(),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: 'The new passwords do not match',
+    path: ['confirm_password'],
+  })
+  .refine((data) => data.password !== data.current_password, {
+    message: 'The new password must be different from the current one',
+    path: ['password'],
+  });
+
+/**
+ * Changes the signed-in user's own password. Available to every role.
+ *
+ * The current password is re-verified by attempting a sign-in with it. Supabase
+ * has no "confirm password" endpoint, and `updateUser` alone would let anyone
+ * with access to an unlocked session silently take over the account.
+ */
+export async function changeOwnPassword(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireProfile();
+
+  const parsed = changePasswordSchema.safeParse({
+    current_password: formData.get('current_password') ?? '',
+    password: formData.get('password') ?? '',
+    confirm_password: formData.get('confirm_password') ?? '',
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+
+  // Verify the current password on a throwaway client. Using the request's own
+  // client would rotate its session tokens as a side effect of the check.
+  const verifier = createVerificationClient();
+  const { error: verifyError } = await verifier.auth.signInWithPassword({
+    email: profile.email,
+    password: parsed.data.current_password,
+  });
+
+  if (verifyError) {
+    return { error: 'That is not your current password.' };
+  }
+  await verifier.auth.signOut();
+
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+
+  if (error) {
+    return { error: `Could not update your password: ${error.message}` };
+  }
+
+  revalidatePath('/account');
+  return { success: 'Your password has been updated.' };
+}
+
+const profileSchema = z.object({
+  full_name: z.string().trim().min(1, 'Full name is required').max(200),
+});
+
+/** Updates the signed-in user's own display name. Available to every role. */
+export async function updateOwnProfile(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const profile = await requireProfile();
+
+  const parsed = profileSchema.safeParse({ full_name: formData.get('full_name') ?? '' });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('profiles')
+    .update({ full_name: parsed.data.full_name })
+    .eq('id', profile.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath('/account');
+  revalidatePath('/', 'layout');
+  return { success: 'Your details have been saved.' };
 }
 
 /**

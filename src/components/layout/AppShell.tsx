@@ -39,7 +39,20 @@ export function AppShell({
 
   const userBlock = (
     <div className="border-t border-[var(--border-subtle)] pt-3 mt-3">
-      <div className="flex items-center gap-2.5 px-1 mb-2">
+      {/* The identity block doubles as the way in to /account, which is where
+          every role — including sales, who cannot open Settings — changes their
+          own name and password. */}
+      <Link
+        href="/account"
+        onClick={() => setDrawerOpen(false)}
+        aria-current={pathname === '/account' ? 'page' : undefined}
+        className={cn(
+          'flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 mb-1 transition-colors',
+          pathname === '/account'
+            ? 'bg-[var(--surface-sunken)]'
+            : 'hover:bg-[var(--surface-sunken)]',
+        )}
+      >
         <span
           className="size-8 rounded-full bg-[var(--surface-sunken)] border border-[var(--border-subtle)] flex items-center justify-center text-xs font-semibold text-[var(--text-secondary)] shrink-0"
           aria-hidden="true"
@@ -50,7 +63,7 @@ export function AppShell({
           <p className="text-sm font-medium truncate">{profile.full_name}</p>
           <p className="text-xs text-[var(--text-muted)] capitalize">{profile.role}</p>
         </div>
-      </div>
+      </Link>
       <form action={signOutAction}>
         <button
           type="submit"

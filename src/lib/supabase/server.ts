@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { Database } from './database.types';
 import { env } from '@/lib/env';
@@ -34,5 +35,25 @@ export async function createClient() {
         },
       },
     },
+  );
+}
+
+/**
+ * A session-less client used only to verify a password by attempting a sign-in.
+ *
+ * Supabase Auth has no "check this password" endpoint, so re-authenticating is
+ * the only way to confirm someone knows their current password before letting
+ * them change it. This must not be the request's own client: a successful
+ * `signInWithPassword` rotates that client's session cookies as a side effect,
+ * which would log the user out of their current session mid-request.
+ *
+ * Nothing here reads or writes application data, so RLS is not a consideration
+ * — it never carries a session beyond the throwaway one it creates.
+ */
+export function createVerificationClient() {
+  return createSupabaseClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
 }
