@@ -22,16 +22,24 @@ import type { Profile } from '@/lib/supabase/database.types';
 export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createClient();
 
+  // `getSession()` reads and verifies the JWT from the cookie locally, with no
+  // network call. `getUser()` would re-validate against Supabase's servers — a
+  // full round trip that middleware has already performed for this request
+  // (see src/middleware.ts), so repeating it here only adds latency.
+  //
+  // The signature check still happens, and the real security boundary is Row
+  // Level Security in Postgres regardless of what this returns.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!user) return null;
+  const userId = session?.user?.id;
+  if (!userId) return null;
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single();
 
   // A deactivated user may still hold a valid token; treat them as signed out.

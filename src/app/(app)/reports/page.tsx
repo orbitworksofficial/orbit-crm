@@ -25,19 +25,31 @@ export default async function ReportsPage({
   const supabase = await createClient();
 
   const range = resolveDateRange(parsePreset(params.range), params.from, params.to);
-  const metrics = await getDashboardMetrics(supabase, range);
 
   // --- Revenue report: invoiced vs paid (brief §07) -------------------------
   // Admin-only data; RLS returns nothing for sales users, so the section is
   // simply hidden for them rather than erroring.
-  let invoiceRows: { total: number; status: string }[] = [];
-  if (profile.role === 'admin') {
-    let invoiceQuery = supabase.from('invoices_with_status').select('total, status, issue_date');
-    if (range.from) invoiceQuery = invoiceQuery.gte('issue_date', range.from.slice(0, 10));
-    if (range.to) invoiceQuery = invoiceQuery.lt('issue_date', range.to.slice(0, 10));
-    const { data } = await invoiceQuery.returns<{ total: number; status: string }[]>();
-    invoiceRows = data ?? [];
-  }
+  let invoiceQuery = supabase.from('invoices_with_status').select('total, status, issue_date');
+  if (range.from) invoiceQuery = invoiceQuery.gte('issue_date', range.from.slice(0, 10));
+  if (range.to) invoiceQuery = invoiceQuery.lt('issue_date', range.to.slice(0, 10));
+
+  // --- Conversion funnel: leads → deals → won ------------------------------
+  let dealsQuery = supabase.from('deals').select('id, status, value, created_at');
+  if (range.from) dealsQuery = dealsQuery.gte('created_at', range.from);
+  if (range.to) dealsQuery = dealsQuery.lt('created_at', range.to);
+
+  // All three groups are independent, so they go out together. Run in sequence
+  // this page cost three full round trips before rendering anything.
+  const [metrics, invoiceResult, dealsResult] = await Promise.all([
+    getDashboardMetrics(supabase, range),
+    profile.role === 'admin'
+      ? invoiceQuery.returns<{ total: number; status: string }[]>()
+      : Promise.resolve({ data: [] as { total: number; status: string }[] }),
+    dealsQuery,
+  ]);
+
+  const invoiceRows = invoiceResult.data ?? [];
+  const dealRows = dealsResult.data;
 
   const totalInvoiced = invoiceRows
     .filter((row) => row.status !== 'void')
@@ -46,12 +58,6 @@ export default async function ReportsPage({
     .filter((row) => row.status === 'paid')
     .reduce((sum, row) => sum + Number(row.total), 0);
   const outstanding = totalInvoiced - totalPaid;
-
-  // --- Conversion funnel: leads → deals → won ------------------------------
-  let dealsQuery = supabase.from('deals').select('id, status, value, created_at');
-  if (range.from) dealsQuery = dealsQuery.gte('created_at', range.from);
-  if (range.to) dealsQuery = dealsQuery.lt('created_at', range.to);
-  const { data: dealRows } = await dealsQuery;
 
   const dealsCreated = dealRows?.length ?? 0;
   const dealsWon = dealRows?.filter((deal) => deal.status === 'won').length ?? 0;

@@ -66,23 +66,6 @@ export default async function InvoicesPage({
   }
   if (params.contact) query = query.eq('contact_id', params.contact);
 
-  const { data, count, error } = await query
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
-    .returns<InvoiceRow[]>();
-
-  const invoices = data ?? [];
-
-  // Resolve contact names in one round trip rather than embedding, since the
-  // view does not carry relationship metadata.
-  const contactIds = [...new Set(invoices.map((invoice) => invoice.contact_id))];
-  const { data: contactRows } = contactIds.length
-    ? await supabase.from('contacts').select('id, full_name, company_name').in('id', contactIds)
-    : { data: [] };
-
-  const contactsById = new Map(
-    (contactRows ?? []).map((contact) => [contact.id, contact]),
-  );
-
   // Totals reflect the current filter, across all pages.
   let totalsQuery = supabase.from('invoices_with_status').select('total, status');
   if (params.status === 'overdue') {
@@ -92,7 +75,29 @@ export default async function InvoicesPage({
   }
   if (params.contact) totalsQuery = totalsQuery.eq('contact_id', params.contact);
 
-  const { data: totalsRows } = await totalsQuery.returns<{ total: number; status: string }[]>();
+  // The page rows and the summary totals do not depend on each other, so they
+  // travel together rather than as two sequential round trips.
+  const [listResult, totalsResult] = await Promise.all([
+    query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1).returns<InvoiceRow[]>(),
+    totalsQuery.returns<{ total: number; status: string }[]>(),
+  ]);
+
+  const { data, count, error } = listResult;
+  const { data: totalsRows } = totalsResult;
+
+  const invoices = data ?? [];
+
+  // Contact names must wait: which ids to fetch is only known once the page of
+  // invoices comes back.
+  const contactIds = [...new Set(invoices.map((invoice) => invoice.contact_id))];
+  const { data: contactRows } = contactIds.length
+    ? await supabase.from('contacts').select('id, full_name, company_name').in('id', contactIds)
+    : { data: [] };
+
+  const contactsById = new Map(
+    (contactRows ?? []).map((contact) => [contact.id, contact]),
+  );
+
   const totalInvoiced =
     totalsRows?.filter((row) => row.status !== 'void').reduce((sum, row) => sum + Number(row.total), 0) ?? 0;
   const totalPaid =

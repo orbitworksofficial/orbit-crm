@@ -15,6 +15,25 @@ const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/auth/c
  * is what actually protects the data — a bypass here would still return nothing.
  */
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // A visitor with no Supabase cookie cannot be signed in, so there is nothing
+  // to validate. Skipping the round trip here makes the login page — the one
+  // page every unauthenticated visitor loads — respond without touching the
+  // network at all.
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token'));
+
+  if (!hasAuthCookie) {
+    const isPublic = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
+    if (isPublic) return NextResponse.next({ request });
+
+    const redirectUrl = new URL('/login', request.url);
+    if (pathname !== '/') redirectUrl.searchParams.set('next', pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -42,7 +61,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
 
   if (!user && !isPublicRoute) {

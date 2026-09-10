@@ -57,18 +57,23 @@ export default async function DealsPage({
   const sort = SORTABLE_FIELDS.has(params.sort ?? '') ? params.sort! : 'created_at';
   const ascending = params.dir === 'asc';
 
-  const { data, count, error } = await buildDealsQuery(supabase, params, { count: true })
-    .order(sort, { ascending })
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
-    .returns<DealRow[]>();
+  // Both queries are issued together. Awaiting them in sequence would stack two
+  // full round trips to the database for a page that needs one.
+  const [listResult, summaryResult] = await Promise.all([
+    buildDealsQuery(supabase, params, { count: true })
+      .order(sort, { ascending })
+      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
+      .returns<DealRow[]>(),
+    // Summary reflects the current filter set, excluding pagination — so it
+    // answers "what is this filtered view worth", not "what is on this page".
+    buildDealsQuery(supabase, params).returns<Pick<DealRow, 'value' | 'status'>[]>(),
+  ]);
+
+  const { data, count, error } = listResult;
+  const summaryRows = summaryResult.data;
 
   const deals = data ?? [];
   const filtered = hasActiveDealFilters(params);
-
-  // Summary reflects the current filter set, excluding pagination — so it
-  // answers "what is this filtered view worth", not "what is on this page".
-  const { data: summaryRows } = await buildDealsQuery(supabase, params)
-    .returns<Pick<DealRow, 'value' | 'status'>[]>();
 
   const openValue =
     summaryRows?.filter((d) => d.status === 'open').reduce((sum, d) => sum + Number(d.value), 0) ?? 0;
