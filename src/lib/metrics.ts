@@ -259,3 +259,92 @@ export async function getAttributionMetrics(
     hasData: byChannel.length > 0,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Time series                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface TimePoint {
+  /** ISO date at the start of the bucket. */
+  date: string;
+  /** Short display label, e.g. "12 Aug". */
+  label: string;
+  leads: number;
+  revenue: number;
+}
+
+/**
+ * Leads and closed revenue bucketed over the selected range.
+ *
+ * Buckets are chosen from the span so the chart never renders 90 unreadable
+ * daily ticks: up to 31 days is daily, beyond that weekly. Empty buckets are
+ * emitted with zeroes rather than skipped — a gap in a time series must read
+ * as "nothing happened", not as missing data.
+ *
+ * Leads count by `created_at`; revenue sums won deals by `closed_at`, matching
+ * how the headline figures are computed.
+ */
+export async function getTimeSeries(
+  supabase: SupabaseClient<Database>,
+  range: ResolvedRange,
+): Promise<{ points: TimePoint[]; bucket: 'day' | 'week' }> {
+  const to = range.to ? new Date(range.to) : new Date();
+  // All-time has no lower bound; 90 days keeps the chart readable.
+  const from = range.from
+    ? new Date(range.from)
+    : new Date(to.getTime() - 90 * 864e5);
+
+  const spanDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / 864e5));
+  const bucket: 'day' | 'week' = spanDays <= 31 ? 'day' : 'week';
+  const stepMs = bucket === 'day' ? 864e5 : 7 * 864e5;
+
+  const [contactsResult, dealsResult] = await Promise.all([
+    supabase
+      .from('contacts')
+      .select('created_at')
+      .gte('created_at', from.toISOString())
+      .lt('created_at', to.toISOString()),
+    supabase
+      .from('deals')
+      .select('value, closed_at')
+      .eq('status', 'won')
+      .gte('closed_at', from.toISOString())
+      .lt('closed_at', to.toISOString()),
+  ]);
+
+  // Pre-seed every bucket so gaps render as zero rather than vanishing.
+  const points: TimePoint[] = [];
+  const index = new Map<number, TimePoint>();
+
+  const formatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+
+  for (let t = from.getTime(); t < to.getTime(); t += stepMs) {
+    const date = new Date(t);
+    const point: TimePoint = {
+      date: date.toISOString(),
+      label: formatter.format(date),
+      leads: 0,
+      revenue: 0,
+    };
+    points.push(point);
+    index.set(Math.floor((t - from.getTime()) / stepMs), point);
+  }
+
+  const bucketFor = (iso: string) => {
+    const offset = new Date(iso).getTime() - from.getTime();
+    return index.get(Math.floor(offset / stepMs));
+  };
+
+  for (const contact of contactsResult.data ?? []) {
+    const point = bucketFor(contact.created_at);
+    if (point) point.leads += 1;
+  }
+
+  for (const deal of dealsResult.data ?? []) {
+    if (!deal.closed_at) continue;
+    const point = bucketFor(deal.closed_at);
+    if (point) point.revenue += Number(deal.value);
+  }
+
+  return { points, bucket };
+}

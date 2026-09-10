@@ -4,10 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 import { requireProfile } from '@/lib/auth';
 import { Card, CardHeader, PageHeader } from '@/components/ui/Card';
 import { StatTile } from '@/components/charts/StatTile';
-import { BarList } from '@/components/charts/BarList';
+import { ColumnChart } from '@/components/charts/ColumnChart';
+import { TrendChart } from '@/components/charts/TrendChart';
+import { FunnelChart } from '@/components/charts/FunnelChart';
 import { CampaignPanel } from '@/components/charts/CampaignPanel';
 import { DateRangeFilter } from './DateRangeFilter';
-import { getDashboardMetrics, getAttributionMetrics } from '@/lib/metrics';
+import { getDashboardMetrics, getAttributionMetrics, getTimeSeries } from '@/lib/metrics';
 import { resolveDateRange, parsePreset } from '@/lib/date-range';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 
@@ -28,10 +30,28 @@ export default async function DashboardPage({
 
   const range = resolveDateRange(parsePreset(params.range), params.from, params.to);
   // Both metric sets are independent, so they share one round trip.
-  const [metrics, attribution] = await Promise.all([
+  const [metrics, attribution, series] = await Promise.all([
     getDashboardMetrics(supabase, range),
     getAttributionMetrics(supabase, range),
+    getTimeSeries(supabase, range),
   ]);
+
+  // Funnel stages, ordered by how far through the pipeline they sit. Built from
+  // the status breakdown rather than hardcoded names, so renaming a status in
+  // Settings cannot break the chart. Won and lost are terminal and identified
+  // by their flags.
+  const stageOrder = ['new', 'contacted', 'in discussion', 'proposal sent'];
+
+  const funnelStages = [
+    { label: 'All leads', count: metrics.totalLeads },
+    ...stageOrder
+      .map((name) => {
+        const match = metrics.leadsByStatus.find((s) => s.label.toLowerCase() === name);
+        return match ? { label: match.label, count: match.count } : null;
+      })
+      .filter((s): s is { label: string; count: number } => s !== null && s.count > 0),
+    { label: 'Won', count: metrics.wonLeads },
+  ];
 
   return (
     <>
@@ -156,16 +176,33 @@ export default async function DashboardPage({
         </Card>
       )}
 
-      {/* --- Breakdowns --- */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* --- Trend over time --- */}
+      <Card className="mb-4">
+        <CardHeader
+          title="Revenue and leads over time"
+          description="Closed revenue and new leads across the selected period."
+        />
+        <TrendChart points={series.points} bucket={series.bucket} />
+      </Card>
+
+      {/* --- Funnel + source --- */}
+      <div className="grid gap-4 lg:grid-cols-2 mb-4">
         <Card>
-          <CardHeader title="Leads by source" description="Where leads came from." />
-          <BarList data={metrics.leadsBySource} tone="chart-1" />
+          <CardHeader title="Pipeline funnel" description="Where leads drop off." />
+          <FunnelChart stages={funnelStages} />
         </Card>
 
         <Card>
+          <CardHeader title="Leads by source" description="Where leads came from." />
+          <ColumnChart data={metrics.leadsBySource} tone="chart-1" />
+        </Card>
+      </div>
+
+      {/* --- Breakdowns --- */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
           <CardHeader title="Leads by service" description="Most requested services." />
-          <BarList
+          <ColumnChart
             data={metrics.leadsByService.slice(0, 8)}
             tone="chart-3"
             emptyMessage="No service tags in this period."
@@ -173,8 +210,8 @@ export default async function DashboardPage({
         </Card>
 
         <Card>
-          <CardHeader title="Leads by status" description="Where leads sit in the funnel." />
-          <BarList data={metrics.leadsByStatus} tone="chart-4" />
+          <CardHeader title="Leads by status" description="Current stage of each lead." />
+          <ColumnChart data={metrics.leadsByStatus} tone="chart-4" />
         </Card>
       </div>
 
