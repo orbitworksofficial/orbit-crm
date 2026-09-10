@@ -138,3 +138,124 @@ export async function getDashboardMetrics(
     topSource: leadsBySource[0] ?? null,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Campaign attribution                                                        */
+/* -------------------------------------------------------------------------- */
+
+export interface CampaignRow {
+  /** utm_campaign, or the channel name when a lead carried no campaign tag. */
+  label: string;
+  channel: string;
+  leads: number;
+  won: number;
+  revenue: number;
+}
+
+export interface AttributionMetrics {
+  /** Leads grouped by utm_source — the acquisition channel. */
+  byChannel: CampaignRow[];
+  /** Leads grouped by utm_campaign, best performers first. */
+  byCampaign: CampaignRow[];
+  /** Leads in the period carrying no utm_source at all. */
+  untracked: number;
+  /** True once any lead has ever carried a utm_source. Gates the whole panel. */
+  hasData: boolean;
+}
+
+/**
+ * Marketing attribution from the UTM tags captured on each contact.
+ *
+ * This is the Phase 1 half of the brief's Phase 2 "Ad Platform Integration":
+ * it answers *which campaigns produce leads and revenue* using data the website
+ * form already sends. What it cannot show is **spend**, and therefore ROAS —
+ * those require pulling from the Meta and Google Ads APIs, which is Phase 2.
+ *
+ * Revenue is attributed to the campaign that produced the contact, summed over
+ * that contact's won deals. A deal is only counted once, against the campaign
+ * of its own contact.
+ */
+export async function getAttributionMetrics(
+  supabase: SupabaseClient<Database>,
+  range: ResolvedRange,
+): Promise<AttributionMetrics> {
+  let query = supabase
+    .from('contacts')
+    .select('id, utm_source, utm_medium, utm_campaign, lead_status:lead_statuses(is_won)');
+
+  if (range.from) query = query.gte('created_at', range.from);
+  if (range.to) query = query.lt('created_at', range.to);
+
+  const { data } = await query;
+
+  type Row = {
+    id: string;
+    utm_source: string | null;
+    utm_campaign: string | null;
+    lead_status: { is_won: boolean } | null;
+  };
+  const contacts = (data ?? []) as unknown as Row[];
+
+  // Revenue for these contacts, from deals that actually closed won. Fetched in
+  // one query keyed by contact rather than per row.
+  const contactIds = contacts.map((c) => c.id);
+  const revenueByContact = new Map<string, number>();
+
+  if (contactIds.length > 0) {
+    const { data: deals } = await supabase
+      .from('deals')
+      .select('contact_id, value')
+      .eq('status', 'won')
+      .in('contact_id', contactIds);
+
+    for (const deal of deals ?? []) {
+      revenueByContact.set(
+        deal.contact_id,
+        (revenueByContact.get(deal.contact_id) ?? 0) + Number(deal.value),
+      );
+    }
+  }
+
+  /** Accumulates leads, wins, and revenue under a grouping key. */
+  function group(keyOf: (row: Row) => string | null): CampaignRow[] {
+    const map = new Map<string, CampaignRow>();
+
+    for (const contact of contacts) {
+      const key = keyOf(contact);
+      if (!key) continue;
+
+      let entry = map.get(key);
+      if (!entry) {
+        entry = {
+          label: key,
+          channel: contact.utm_source ?? 'Unknown',
+          leads: 0,
+          won: 0,
+          revenue: 0,
+        };
+        map.set(key, entry);
+      }
+
+      entry.leads += 1;
+      if (contact.lead_status?.is_won) entry.won += 1;
+      entry.revenue += revenueByContact.get(contact.id) ?? 0;
+    }
+
+    // Revenue first, then leads: a campaign that produced money outranks one
+    // that produced only volume.
+    return [...map.values()].sort(
+      (a, b) => b.revenue - a.revenue || b.leads - a.leads,
+    );
+  }
+
+  const byChannel = group((row) => row.utm_source);
+  const byCampaign = group((row) => row.utm_campaign ?? row.utm_source);
+  const untracked = contacts.filter((row) => !row.utm_source).length;
+
+  return {
+    byChannel,
+    byCampaign,
+    untracked,
+    hasData: byChannel.length > 0,
+  };
+}

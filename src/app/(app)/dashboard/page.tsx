@@ -5,8 +5,9 @@ import { requireProfile } from '@/lib/auth';
 import { Card, CardHeader, PageHeader } from '@/components/ui/Card';
 import { StatTile } from '@/components/charts/StatTile';
 import { BarList } from '@/components/charts/BarList';
+import { CampaignPanel } from '@/components/charts/CampaignPanel';
 import { DateRangeFilter } from './DateRangeFilter';
-import { getDashboardMetrics } from '@/lib/metrics';
+import { getDashboardMetrics, getAttributionMetrics } from '@/lib/metrics';
 import { resolveDateRange, parsePreset } from '@/lib/date-range';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 
@@ -26,7 +27,11 @@ export default async function DashboardPage({
   const supabase = await createClient();
 
   const range = resolveDateRange(parsePreset(params.range), params.from, params.to);
-  const metrics = await getDashboardMetrics(supabase, range);
+  // Both metric sets are independent, so they share one round trip.
+  const [metrics, attribution] = await Promise.all([
+    getDashboardMetrics(supabase, range),
+    getAttributionMetrics(supabase, range),
+  ]);
 
   return (
     <>
@@ -130,6 +135,11 @@ export default async function DashboardPage({
           <CardHeader title="Leads by status" description="Where leads sit in the funnel." />
           <BarList data={metrics.leadsByStatus} tone="chart-4" />
         </Card>
+      </div>
+
+      {/* --- Marketing attribution --- */}
+      <div className="mt-4">
+        <CampaignPanel metrics={attribution} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 mt-4">
