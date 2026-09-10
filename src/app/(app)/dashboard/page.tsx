@@ -55,6 +55,47 @@ export default async function DashboardPage({
 
       <DateRangeFilter current={params} />
 
+      {/* A period with no leads renders a page of zeroes and empty charts, which
+          reads as a broken dashboard rather than an empty one. Say so plainly,
+          and offer the widest range as a way out. */}
+      {metrics.totalLeads === 0 && (
+        <Card className="mb-4">
+          <div className="flex items-start gap-3 flex-wrap">
+            <span
+              className="size-9 rounded-lg bg-[var(--info-bg)] flex items-center justify-center shrink-0"
+              aria-hidden="true"
+            >
+              <svg
+                className="size-4 text-[var(--info)]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">No leads in this period</p>
+              <p className="text-sm text-[var(--text-secondary)] mt-0.5">
+                The charts below are empty because no contacts were created in{' '}
+                {range.label.toLowerCase()}. Widen the date range to see earlier
+                activity.
+              </p>
+              <Link
+                href="/dashboard?range=all_time"
+                className="inline-block mt-2 text-sm text-[var(--primary)] hover:underline font-medium"
+              >
+                Show all time
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* --- Headline figures --- */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-4">
         <StatTile
