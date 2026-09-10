@@ -15,8 +15,8 @@
     "db:new": "supabase migration new",
     "db:seed": "supabase db push --include-seed",
     "db:types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts",
-    "db:demo": "supabase db query --linked --file supabase/seed_demo.sql",
-    "db:demo:clear": "supabase db query --linked --file supabase/seed_demo_clear.sql",
+    "db:demo": "node scripts/seed-demo.mjs",
+    "db:demo:clear": "node scripts/clear-demo.mjs",
     "logo:build": "node scripts/build-logo.mjs"
   },
   "dependencies": {
