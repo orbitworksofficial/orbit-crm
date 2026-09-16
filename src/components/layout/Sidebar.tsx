@@ -18,6 +18,8 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   adminOnly?: boolean;
+  /** Key into the `badges` prop, for a count shown beside the label. */
+  badgeKey?: 'tasks';
 }
 
 const iconProps = {
@@ -77,6 +79,17 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/tasks',
+    label: 'Tasks',
+    badgeKey: 'tasks',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M9 11l3 3L22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+    ),
+  },
+  {
     href: '/invoices',
     label: 'Invoices',
     icon: (
@@ -113,10 +126,13 @@ const NAV_ITEMS: NavItem[] = [
 export function SidebarNav({
   role,
   onNavigate,
+  badges,
 }: {
   role: UserRole;
   /** Called after a link is followed, so the mobile drawer can close itself. */
   onNavigate?: () => void;
+  /** Counts shown beside nav labels, e.g. tasks due. */
+  badges?: Partial<Record<'tasks', number>>;
 }) {
   const pathname = usePathname();
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin');
@@ -146,6 +162,21 @@ export function SidebarNav({
           >
             {item.icon}
             {item.label}
+            {/* A count only appears when there is something to act on, so an
+                empty badge never adds noise. */}
+            {item.badgeKey && (badges?.[item.badgeKey] ?? 0) > 0 && (
+              <span
+                className={cn(
+                  'ml-auto min-w-5 px-1.5 h-5 rounded-full text-[11px] font-semibold',
+                  'inline-flex items-center justify-center tabular',
+                  isActive
+                    ? 'bg-[var(--primary-foreground)] text-[var(--primary)]'
+                    : 'bg-[var(--danger)] text-white',
+                )}
+              >
+                {badges?.[item.badgeKey]}
+              </span>
+            )}
           </Link>
         );
       })}

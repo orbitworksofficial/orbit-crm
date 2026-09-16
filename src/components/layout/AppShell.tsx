@@ -16,11 +16,14 @@ import type { Profile } from '@/lib/supabase/database.types';
 export function AppShell({
   profile,
   signOutAction,
+  badges,
   children,
 }: {
   profile: Profile;
   /** Server action bound by the layout; rendered inside a form. */
   signOutAction: () => Promise<void>;
+  /** Counts for nav badges, resolved server-side in the layout. */
+  badges?: Partial<Record<'tasks', number>>;
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -93,7 +96,7 @@ export function AppShell({
       <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-raised)] p-3 fixed inset-y-0">
         <div className="h-12 flex items-center">{brand}</div>
         <div className="flex-1 overflow-y-auto py-2">
-          <SidebarNav role={profile.role} />
+          <SidebarNav role={profile.role} badges={badges} />
         </div>
         {userBlock}
       </aside>
@@ -122,7 +125,7 @@ export function AppShell({
               </button>
             </div>
             <div className="flex-1 overflow-y-auto py-2">
-              <SidebarNav role={profile.role} onNavigate={() => setDrawerOpen(false)} />
+              <SidebarNav role={profile.role} badges={badges} onNavigate={() => setDrawerOpen(false)} />
             </div>
             {userBlock}
           </aside>

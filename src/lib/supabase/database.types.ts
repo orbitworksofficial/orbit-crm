@@ -101,6 +101,40 @@ export type Contact = {
   updated_at: string;
 }
 
+export type TaskPriority = 'low' | 'normal' | 'high';
+
+export type Task = {
+  id: string;
+  organization_id: string;
+  title: string;
+  description: string | null;
+  contact_id: string | null;
+  deal_id: string | null;
+  due_date: string | null;
+  priority: TaskPriority;
+  completed_at: string | null;
+  completed_by: string | null;
+  assigned_to: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Row of the `pending_reminders` view: open tasks plus note reminders. */
+export type PendingReminder = {
+  id: string;
+  kind: 'task' | 'note';
+  organization_id: string;
+  title: string;
+  detail: string | null;
+  due_date: string | null;
+  priority: string;
+  assigned_to: string | null;
+  contact_id: string | null;
+  deal_id: string | null;
+  created_at: string;
+};
+
 export type StageColor = 'blue' | 'pink' | 'amber' | 'green' | 'neutral';
 
 export type PipelineStage = {
@@ -280,6 +314,16 @@ export interface Database {
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
       >;
+      tasks: TableDef<
+        Task,
+        [
+          FK<'tasks_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'tasks_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'tasks_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'tasks_assigned_to_fkey', 'assigned_to', 'profiles'>,
+          FK<'tasks_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
       pipeline_stages: TableDef<
         PipelineStage,
         [FK<'pipeline_stages_organization_id_fkey', 'organization_id', 'organizations'>]
@@ -356,6 +400,10 @@ export interface Database {
     Views: {
       invoices_with_status: {
         Row: InvoiceWithStatus;
+        Relationships: [];
+      };
+      pending_reminders: {
+        Row: PendingReminder;
         Relationships: [];
       };
     };
