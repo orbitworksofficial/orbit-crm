@@ -9,6 +9,7 @@ import { TrendChart } from '@/components/charts/TrendChart';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { CampaignPanel } from '@/components/charts/CampaignPanel';
 import { DateRangeFilter } from './DateRangeFilter';
+import { LiveIndicator } from '@/components/realtime/LiveIndicator';
 import { getDashboardMetrics, getAttributionMetrics, getTimeSeries } from '@/lib/metrics';
 import { resolveDateRange, parsePreset } from '@/lib/date-range';
 import { formatCurrency, formatPercent } from '@/lib/utils';
@@ -62,6 +63,7 @@ export default async function DashboardPage({
             ? 'Company-wide performance.'
             : 'Performance across the leads and deals assigned to you.'
         }
+        action={<LiveIndicator tables={['contacts', 'deals']} />}
       />
 
       {params.error === 'forbidden' && (

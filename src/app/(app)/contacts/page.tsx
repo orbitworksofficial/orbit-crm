@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { ContactFilters } from './ContactFilters';
+import { LiveIndicator } from '@/components/realtime/LiveIndicator';
 import { buildContactsQuery, hasActiveFilters, type ContactListFilters } from './queries';
 import { formatDate } from '@/lib/utils';
 
@@ -85,9 +86,12 @@ export default async function ContactsPage({
             : 'Leads and customers assigned to you.'
         }
         action={
-          <Link href="/contacts/new">
-            <Button>New contact</Button>
-          </Link>
+          <>
+            <LiveIndicator tables={['contacts']} className="mr-1" />
+            <Link href="/contacts/new">
+              <Button>New contact</Button>
+            </Link>
+          </>
         }
       />
 
