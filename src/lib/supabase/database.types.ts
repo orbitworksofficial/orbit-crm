@@ -26,6 +26,8 @@ export type Organization = {
   contact_email: string | null;
   invoice_prefix: string;
   invoice_next_number: number;
+  proposal_prefix: string;
+  proposal_next_number: number;
   default_currency: string;
   default_payment_terms_days: number;
   default_tax_rate: number;
@@ -100,6 +102,52 @@ export type Contact = {
   created_at: string;
   updated_at: string;
 }
+
+export type ProposalStatus = 'draft' | 'sent' | 'accepted' | 'declined';
+/** Display status shown in the UI. `expired` is derived, never stored. */
+export type ProposalDisplayStatus = ProposalStatus | 'expired';
+
+export type Proposal = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  deal_id: string | null;
+  proposal_number: string;
+  title: string;
+  status: ProposalStatus;
+  summary: string | null;
+  terms: string | null;
+  issue_date: string;
+  valid_until: string;
+  responded_at: string | null;
+  currency: string;
+  tax_rate: number;
+  discount_rate: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Row of `proposals_with_status`: proposal plus derived status and money. */
+export type ProposalWithStatus = Proposal & {
+  display_status: ProposalDisplayStatus;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total: number;
+};
+
+export type ProposalLineItem = {
+  id: string;
+  proposal_id: string;
+  service_id: string | null;
+  name: string;
+  description: string | null;
+  quantity: number;
+  rate: number;
+  sort_order: number;
+  created_at: string;
+};
 
 export type DocumentKind =
   | 'contract' | 'proposal' | 'agreement' | 'invoice_copy' | 'other';
@@ -334,6 +382,22 @@ export interface Database {
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
       >;
+      proposals: TableDef<
+        Proposal,
+        [
+          FK<'proposals_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'proposals_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'proposals_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'proposals_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
+      proposal_line_items: TableDef<
+        ProposalLineItem,
+        [
+          FK<'proposal_line_items_proposal_id_fkey', 'proposal_id', 'proposals'>,
+          FK<'proposal_line_items_service_id_fkey', 'service_id', 'services'>,
+        ]
+      >;
       documents: TableDef<
         CrmDocument,
         [
@@ -431,6 +495,10 @@ export interface Database {
         Row: InvoiceWithStatus;
         Relationships: [];
       };
+      proposals_with_status: {
+        Row: ProposalWithStatus;
+        Relationships: [];
+      };
       pending_reminders: {
         Row: PendingReminder;
         Relationships: [];
@@ -438,6 +506,7 @@ export interface Database {
     };
     Functions: {
       next_invoice_number: { Args: { p_organization_id: string }; Returns: string };
+      next_proposal_number: { Args: { p_organization_id: string }; Returns: string };
       current_org_id: { Args: Record<string, never>; Returns: string };
       is_admin: { Args: Record<string, never>; Returns: boolean };
       set_user_role: { Args: { p_user_id: string; p_role: UserRole }; Returns: undefined };
