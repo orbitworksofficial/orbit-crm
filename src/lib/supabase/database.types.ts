@@ -103,6 +103,31 @@ export type Contact = {
   updated_at: string;
 }
 
+/** Row of the `lead_scores` view: a 0-100 score plus its components. */
+export type LeadScore = {
+  id: string;
+  organization_id: string;
+  score: number;
+  score_source: number;
+  score_engagement: number;
+  score_service: number;
+  score_recency: number;
+  score_completeness: number;
+  is_won: boolean | null;
+  is_lost: boolean | null;
+};
+
+export type ScoringWeights = {
+  organization_id: string;
+  weight_source: number;
+  weight_engagement: number;
+  weight_service: number;
+  weight_recency: number;
+  weight_completeness: number;
+  high_intent_sources: string[];
+  updated_at: string;
+};
+
 export type AdPlatform = 'meta' | 'google' | 'linkedin';
 
 export type AdCredential = {
@@ -417,6 +442,10 @@ export interface Database {
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
       >;
+      scoring_weights: TableDef<
+        ScoringWeights,
+        [FK<'scoring_weights_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
       ad_credentials: TableDef<
         AdCredential,
         [
@@ -543,6 +572,10 @@ export interface Database {
       };
       proposals_with_status: {
         Row: ProposalWithStatus;
+        Relationships: [];
+      };
+      lead_scores: {
+        Row: LeadScore;
         Relationships: [];
       };
       pending_reminders: {

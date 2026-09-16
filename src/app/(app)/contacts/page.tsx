@@ -18,6 +18,7 @@ import {
 import { Pagination } from '@/components/ui/Pagination';
 import { ContactFilters } from './ContactFilters';
 import { LiveIndicator } from '@/components/realtime/LiveIndicator';
+import { ScorePill } from '@/components/crm/LeadScore';
 import { buildContactsQuery, hasActiveFilters, type ContactListFilters } from './queries';
 import { formatDate } from '@/lib/utils';
 
@@ -75,6 +76,18 @@ export default async function ContactsPage({
 
   const contacts = data ?? [];
   const filtered = hasActiveFilters(params);
+
+  // Scores for the visible page only. Fetched separately rather than joined
+  // because lead_scores is a view over contacts — embedding it would recurse.
+  const scoreRows = contacts.length
+    ? (
+        await supabase
+          .from('lead_scores')
+          .select('id, score, is_won, is_lost')
+          .in('id', contacts.map((c) => c.id))
+      ).data
+    : [];
+  const scoresById = new Map((scoreRows ?? []).map((s) => [s.id, s]));
 
   return (
     <>
@@ -148,6 +161,7 @@ export default async function ContactsPage({
                     Company
                   </SortableTH>
                   <TH>Status</TH>
+                  <TH>Score</TH>
                   <TH>Source</TH>
                   <TH>Owner</TH>
                   <SortableTH
@@ -186,6 +200,19 @@ export default async function ContactsPage({
                       ) : (
                         <span className="text-[var(--text-muted)]">—</span>
                       )}
+                    </TD>
+                    <TD>
+                      {(() => {
+                        const s = scoresById.get(contact.id);
+                        return s ? (
+                          <ScorePill
+                            score={s.score}
+                            isClosed={Boolean(s.is_won || s.is_lost)}
+                          />
+                        ) : (
+                          <span className="text-xs text-[var(--text-muted)]">—</span>
+                        );
+                      })()}
                     </TD>
                     <TD className="text-[var(--text-secondary)] text-xs">
                       {contact.lead_source?.name ?? '—'}

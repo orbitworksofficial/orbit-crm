@@ -8,6 +8,7 @@ import { ColumnChart } from '@/components/charts/ColumnChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { CampaignPanel } from '@/components/charts/CampaignPanel';
+import { HotLeads, type HotLead } from '@/components/crm/HotLeads';
 import { DateRangeFilter } from './DateRangeFilter';
 import { LiveIndicator } from '@/components/realtime/LiveIndicator';
 import { getDashboardMetrics, getAttributionMetrics, getTimeSeries } from '@/lib/metrics';
@@ -36,6 +37,53 @@ export default async function DashboardPage({
     getAttributionMetrics(supabase, range),
     getTimeSeries(supabase, range),
   ]);
+
+  // Highest-scoring open leads. The scoring view already zeroes closed leads,
+  // so a score filter is enough to keep this list actionable.
+  const { data: topScores } = await supabase
+    .from('lead_scores')
+    .select('id, score')
+    .gt('score', 0)
+    .order('score', { ascending: false })
+    .limit(5);
+
+  const hotIds = (topScores ?? []).map((s) => s.id);
+  const { data: hotContacts } = hotIds.length
+    ? await supabase
+        .from('contacts')
+        .select('id, full_name, company_name, created_at, lead_status:lead_statuses(name)')
+        .in('id', hotIds)
+    : { data: [] };
+
+  const contactsById = new Map(
+    (hotContacts ?? []).map((c) => [
+      c.id,
+      c as unknown as {
+        id: string;
+        full_name: string;
+        company_name: string | null;
+        created_at: string;
+        lead_status: { name: string } | null;
+      },
+    ]),
+  );
+
+  // Ordered by score, not by the contacts query, which does not preserve it.
+  const hotLeads: HotLead[] = (topScores ?? [])
+    .map((s) => {
+      const c = contactsById.get(s.id);
+      return c
+        ? {
+            id: c.id,
+            fullName: c.full_name,
+            companyName: c.company_name,
+            statusName: c.lead_status?.name ?? null,
+            score: s.score,
+            createdAt: c.created_at,
+          }
+        : null;
+    })
+    .filter((l): l is HotLead => l !== null);
 
   // Funnel stages, ordered by how far through the pipeline they sit. Built from
   // the status breakdown rather than hardcoded names, so renaming a status in
@@ -187,28 +235,20 @@ export default async function DashboardPage({
         <TrendChart points={series.points} bucket={series.bucket} />
       </Card>
 
-      {/* --- Funnel + source --- */}
+      {/* --- Funnel + hot leads --- */}
       <div className="grid gap-4 lg:grid-cols-2 mb-4">
         <Card>
           <CardHeader title="Pipeline funnel" description="Where leads drop off." />
           <FunnelChart stages={funnelStages} />
         </Card>
 
+        <HotLeads leads={hotLeads} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2 mb-4">
         <Card>
           <CardHeader title="Leads by source" description="Where leads came from." />
           <ColumnChart data={metrics.leadsBySource} tone="chart-1" />
-        </Card>
-      </div>
-
-      {/* --- Breakdowns --- */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Leads by service" description="Most requested services." />
-          <ColumnChart
-            data={metrics.leadsByService.slice(0, 8)}
-            tone="chart-3"
-            emptyMessage="No service tags in this period."
-          />
         </Card>
 
         <Card>
@@ -216,6 +256,16 @@ export default async function DashboardPage({
           <ColumnChart data={metrics.leadsByStatus} tone="chart-4" />
         </Card>
       </div>
+
+      {/* --- Services --- */}
+      <Card>
+        <CardHeader title="Leads by service" description="Most requested services." />
+        <ColumnChart
+          data={metrics.leadsByService.slice(0, 8)}
+          tone="chart-3"
+          emptyMessage="No service tags in this period."
+        />
+      </Card>
 
       {/* --- Marketing attribution --- */}
       <div className="mt-4">

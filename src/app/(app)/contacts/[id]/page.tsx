@@ -9,6 +9,8 @@ import { Badge, leadStatusTone, DealStatusBadge } from '@/components/ui/Badge';
 import { formatDate, formatCurrency, formatDateTime } from '@/lib/utils';
 import { NoteComposer } from '@/components/crm/NoteComposer';
 import { DocumentPanel, type DocumentRow } from '@/components/crm/DocumentPanel';
+import { ScoreBreakdown } from '@/components/crm/LeadScore';
+import type { LeadScore, ScoringWeights } from '@/lib/supabase/database.types';
 import { Timeline } from './Timeline';
 import { addContactNote } from '../actions';
 
@@ -50,7 +52,14 @@ export default async function ContactDetailPage({
   // for the existence of contacts they do not own.
   if (!contact) notFound();
 
-  const [{ data: deals }, { data: notes }, { data: activity }, { data: documents }] = await Promise.all([
+  const [
+    { data: deals },
+    { data: notes },
+    { data: activity },
+    { data: documents },
+    { data: leadScore },
+    { data: weights },
+  ] = await Promise.all([
     supabase
       .from('deals')
       .select('id, title, value, currency, status, expected_close_date')
@@ -72,6 +81,12 @@ export default async function ContactDetailPage({
       .select('*, uploader:profiles(id, full_name)')
       .eq('contact_id', id)
       .order('created_at', { ascending: false }),
+    supabase.from('lead_scores').select('*').eq('id', id).maybeSingle<LeadScore>(),
+    supabase
+      .from('scoring_weights')
+      .select('*')
+      .eq('organization_id', profile.organization_id)
+      .maybeSingle<ScoringWeights>(),
   ]);
 
   const documentRows: DocumentRow[] = (documents ?? []).map((d) => ({
@@ -155,6 +170,25 @@ export default async function ContactDetailPage({
               <DetailRow label="Created" value={formatDateTime(contact.created_at)} />
             </dl>
           </Card>
+
+          {leadScore && weights && (
+            <Card>
+              <CardHeader
+                title="Lead score"
+                description="How likely this lead is to convert, and why."
+              />
+              <ScoreBreakdown
+                score={leadScore}
+                maxima={{
+                  source: weights.weight_source,
+                  engagement: weights.weight_engagement,
+                  service: weights.weight_service,
+                  recency: weights.weight_recency,
+                  completeness: weights.weight_completeness,
+                }}
+              />
+            </Card>
+          )}
 
           <Card>
             <CardHeader title="Service interest" />
