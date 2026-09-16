@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge, leadStatusTone, DealStatusBadge } from '@/components/ui/Badge';
 import { formatDate, formatCurrency, formatDateTime } from '@/lib/utils';
 import { NoteComposer } from '@/components/crm/NoteComposer';
+import { DocumentPanel, type DocumentRow } from '@/components/crm/DocumentPanel';
 import { Timeline } from './Timeline';
 import { addContactNote } from '../actions';
 
@@ -49,7 +50,7 @@ export default async function ContactDetailPage({
   // for the existence of contacts they do not own.
   if (!contact) notFound();
 
-  const [{ data: deals }, { data: notes }, { data: activity }] = await Promise.all([
+  const [{ data: deals }, { data: notes }, { data: activity }, { data: documents }] = await Promise.all([
     supabase
       .from('deals')
       .select('id, title, value, currency, status, expected_close_date')
@@ -66,7 +67,18 @@ export default async function ContactDetailPage({
       .eq('contact_id', id)
       .order('created_at', { ascending: false })
       .limit(50),
+    supabase
+      .from('documents')
+      .select('*, uploader:profiles(id, full_name)')
+      .eq('contact_id', id)
+      .order('created_at', { ascending: false }),
   ]);
+
+  const documentRows: DocumentRow[] = (documents ?? []).map((d) => ({
+    ...d,
+    uploader_name:
+      (d as { uploader?: { full_name: string } | null }).uploader?.full_name ?? null,
+  }));
 
   const services =
     (contact.contact_services as { service: { id: string; name: string } | null }[] | null)
@@ -206,6 +218,8 @@ export default async function ContactDetailPage({
               </ul>
             )}
           </Card>
+
+          <DocumentPanel documents={documentRows} contactId={id} />
 
           <Card>
             <CardHeader title="Add a note" />

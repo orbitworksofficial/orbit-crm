@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge, DealStatusBadge } from '@/components/ui/Badge';
 import { formatDate, formatCurrency, formatDateTime, getInitials } from '@/lib/utils';
 import { NoteComposer } from '@/components/crm/NoteComposer';
+import { DocumentPanel, type DocumentRow } from '@/components/crm/DocumentPanel';
 import { StatusActions } from './StatusActions';
 import { addDealNote } from '../actions';
 
@@ -44,11 +45,24 @@ export default async function DealDetailPage({
 
   if (!deal) notFound();
 
-  const { data: notes } = await supabase
-    .from('notes')
-    .select('*, author:profiles(id, full_name)')
-    .eq('deal_id', id)
-    .order('created_at', { ascending: false });
+  const [{ data: notes }, { data: documents }] = await Promise.all([
+    supabase
+      .from('notes')
+      .select('*, author:profiles(id, full_name)')
+      .eq('deal_id', id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('documents')
+      .select('*, uploader:profiles(id, full_name)')
+      .eq('deal_id', id)
+      .order('created_at', { ascending: false }),
+  ]);
+
+  const documentRows: DocumentRow[] = (documents ?? []).map((d) => ({
+    ...d,
+    uploader_name:
+      (d as { uploader?: { full_name: string } | null }).uploader?.full_name ?? null,
+  }));
 
   const services =
     (deal.deal_services as { service: { id: string; name: string } | null }[] | null)
@@ -129,6 +143,8 @@ export default async function DealDetailPage({
         </div>
 
         <div className="lg:col-span-2 flex flex-col gap-4">
+          <DocumentPanel documents={documentRows} dealId={id} />
+
           <Card>
             <CardHeader title="Add a note" description="Notes here are specific to this deal." />
             <NoteComposer

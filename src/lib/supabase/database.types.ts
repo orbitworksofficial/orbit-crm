@@ -101,6 +101,26 @@ export type Contact = {
   updated_at: string;
 }
 
+export type DocumentKind =
+  | 'contract' | 'proposal' | 'agreement' | 'invoice_copy' | 'other';
+
+export type CrmDocument = {
+  id: string;
+  organization_id: string;
+  contact_id: string | null;
+  deal_id: string | null;
+  name: string;
+  description: string | null;
+  kind: DocumentKind;
+  /** Object path in the private bucket. Not a URL — signatures expire. */
+  storage_path: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type TaskPriority = 'low' | 'normal' | 'high';
 
 export type Task = {
@@ -313,6 +333,15 @@ export interface Database {
       services: TableDef<
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
+      documents: TableDef<
+        CrmDocument,
+        [
+          FK<'documents_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'documents_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'documents_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'documents_uploaded_by_fkey', 'uploaded_by', 'profiles'>,
+        ]
       >;
       tasks: TableDef<
         Task,
