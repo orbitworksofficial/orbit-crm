@@ -235,3 +235,55 @@ export async function addDealNote(
   revalidatePath(`/deals/${dealId}`);
   return {};
 }
+
+/* -------------------------------------------------------------------------- */
+/* Kanban board                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Moves a deal to a different stage and position on the board.
+ *
+ * `board_position` is a fraction midway between the cards either side of the
+ * drop point, so a move is a single UPDATE rather than renumbering the whole
+ * column. Dropping at the top or bottom offsets from the single neighbour.
+ *
+ * The deal's coarse `status` is *not* set here — the `sync_deal_stage_status`
+ * trigger derives it from the stage's `maps_to_status`. Keeping that rule in
+ * the database means dropping a card into "Closed Won" marks the deal won
+ * however the row is updated, including from a future API or import.
+ *
+ * RLS still applies: a sales user can only move deals assigned to them.
+ */
+export async function moveDealToStage(
+  dealId: string,
+  stageId: string,
+  beforePosition: number | null,
+  afterPosition: number | null,
+): Promise<{ error?: string }> {
+  await requireProfile();
+
+  // Midpoint between neighbours; offset from one end when dropped at an edge.
+  let position: number;
+  if (beforePosition != null && afterPosition != null) {
+    position = (beforePosition + afterPosition) / 2;
+  } else if (beforePosition != null) {
+    position = beforePosition + 1000;
+  } else if (afterPosition != null) {
+    position = afterPosition - 1000;
+  } else {
+    position = Date.now() / 1000;
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('deals')
+    .update({ stage_id: stageId, board_position: position })
+    .eq('id', dealId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath('/pipeline');
+  revalidatePath('/deals');
+  revalidatePath('/dashboard');
+  return {};
+}

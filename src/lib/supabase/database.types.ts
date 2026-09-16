@@ -101,6 +101,21 @@ export type Contact = {
   updated_at: string;
 }
 
+export type StageColor = 'blue' | 'pink' | 'amber' | 'green' | 'neutral';
+
+export type PipelineStage = {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  color: StageColor;
+  maps_to_status: DealStatus;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Deal = {
   id: string;
   organization_id: string;
@@ -113,6 +128,10 @@ export type Deal = {
   closed_at: string | null;
   assigned_to: string | null;
   created_by: string | null;
+  /** Kanban column. Null for a deal never placed on the board. */
+  stage_id: string | null;
+  /** Order within a column. Fractional, so inserts need no renumbering. */
+  board_position: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -261,6 +280,10 @@ export interface Database {
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
       >;
+      pipeline_stages: TableDef<
+        PipelineStage,
+        [FK<'pipeline_stages_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
       contacts: TableDef<
         Contact,
         [
@@ -285,6 +308,7 @@ export interface Database {
           FK<'deals_contact_id_fkey', 'contact_id', 'contacts'>,
           FK<'deals_assigned_to_fkey', 'assigned_to', 'profiles'>,
           FK<'deals_created_by_fkey', 'created_by', 'profiles'>,
+          FK<'deals_stage_id_fkey', 'stage_id', 'pipeline_stages'>,
         ]
       >;
       deal_services: TableDef<
