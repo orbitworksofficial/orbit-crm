@@ -103,6 +103,41 @@ export type Contact = {
   updated_at: string;
 }
 
+export type AdPlatform = 'meta' | 'google' | 'linkedin';
+
+export type AdCredential = {
+  id: string;
+  organization_id: string;
+  platform: AdPlatform;
+  /** Ciphertext. Never send this to the browser. */
+  access_token: string;
+  refresh_token: string | null;
+  account_id: string;
+  token_hint: string;
+  is_active: boolean;
+  last_synced_at: string | null;
+  last_error: string | null;
+  expires_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdSpendRow = {
+  id: string;
+  organization_id: string;
+  platform: AdPlatform;
+  spend_date: string;
+  campaign_id: string;
+  campaign_name: string;
+  utm_campaign: string | null;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  platform_conversions: number;
+  synced_at: string;
+};
+
 export type ProposalStatus = 'draft' | 'sent' | 'accepted' | 'declined';
 /** Display status shown in the UI. `expired` is derived, never stored. */
 export type ProposalDisplayStatus = ProposalStatus | 'expired';
@@ -381,6 +416,17 @@ export interface Database {
       services: TableDef<
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
+      >;
+      ad_credentials: TableDef<
+        AdCredential,
+        [
+          FK<'ad_credentials_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'ad_credentials_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
+      ad_spend: TableDef<
+        AdSpendRow,
+        [FK<'ad_spend_organization_id_fkey', 'organization_id', 'organizations'>]
       >;
       proposals: TableDef<
         Proposal,
