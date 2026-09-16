@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 
@@ -50,6 +50,17 @@ export async function signIn(
     return { error: 'Incorrect email or password.' };
   }
 
+  // Start the inactivity clock fresh. Without this a stale `ow_last_seen` from a
+  // previous session survives login, and the middleware immediately reads it as
+  // an idle timeout — signing the user straight back out with "You were signed
+  // out due to inactivity."
+  (await cookies()).set('ow_last_seen', String(Date.now()), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+  });
+
   // Only relative paths are honoured, so ?next= cannot be used as an open redirect.
   const next =
     parsed.data.next && parsed.data.next.startsWith('/') && !parsed.data.next.startsWith('//')
@@ -63,6 +74,11 @@ export async function signIn(
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
+
+  // Clear the activity marker alongside the session. Leaving it behind makes
+  // the next sign-in look like a resumed idle session.
+  (await cookies()).delete('ow_last_seen');
+
   revalidatePath('/', 'layout');
   redirect('/login');
 }

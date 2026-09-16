@@ -82,7 +82,37 @@ export async function middleware(request: NextRequest) {
     const lastSeenRaw = request.cookies.get('ow_last_seen')?.value;
     const now = Date.now();
 
-    if (lastSeenRaw) {
+    // Ignore a marker older than the session itself: it belongs to a previous
+    // visit, and treating it as idle time signs the user straight back out the
+    // moment they log in.
+    //
+    // `user.last_sign_in_at` cannot be used for this — Supabase advances it on
+    // every token refresh, so it would always look newer than the marker and
+    // the timeout would never fire at all. The access token's `iat` is fixed
+    // for the life of the token, which is the boundary actually wanted here.
+    //
+    // The sign-in action resets the cookie too; this is the backstop for the
+    // other paths that mint a session (password recovery, invite links).
+    let tokenIssuedMs: number | null = null;
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token;
+    if (accessToken) {
+      try {
+        const claims = JSON.parse(
+          Buffer.from(accessToken.split('.')[1], 'base64').toString('utf8'),
+        ) as { iat?: number };
+        if (typeof claims.iat === 'number') tokenIssuedMs = claims.iat * 1000;
+      } catch {
+        // A token we cannot parse simply gets no grace period.
+      }
+    }
+
+    const markerPredatesSession =
+      tokenIssuedMs !== null &&
+      lastSeenRaw !== undefined &&
+      // One minute of slack absorbs clock skew between the token and this host.
+      Number(lastSeenRaw) < tokenIssuedMs - 60_000;
+
+    if (lastSeenRaw && !markerPredatesSession) {
       const idleMs = now - Number(lastSeenRaw);
       if (Number.isFinite(idleMs) && idleMs > idleTimeoutMinutes * 60_000) {
         await supabase.auth.signOut();
