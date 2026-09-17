@@ -111,6 +111,16 @@ const NAV_ITEMS: NavItem[] = [
     adminOnly: true,
   },
   {
+    href: '/subscriptions',
+    label: 'Retainers',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M21 12a9 9 0 1 1-2.6-6.4" />
+        <path d="M21 3v6h-6" />
+      </svg>
+    ),
+  },
+  {
     href: '/reports',
     label: 'Reports',
     icon: (

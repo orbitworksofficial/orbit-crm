@@ -103,6 +103,37 @@ export type Contact = {
   updated_at: string;
 }
 
+export type BillingCycle = 'monthly' | 'quarterly' | 'annual';
+export type SubscriptionStatus = 'active' | 'paused' | 'cancelled';
+
+export type Subscription = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  deal_id: string | null;
+  name: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  cycle: BillingCycle;
+  status: SubscriptionStatus;
+  started_on: string;
+  next_billing_date: string;
+  ends_on: string | null;
+  cancelled_at: string | null;
+  reminder_days: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SubscriptionService = {
+  subscription_id: string;
+  service_id: string;
+  quantity: number;
+  rate: number;
+};
+
 /** Row of the `lead_scores` view: a 0-100 score plus its components. */
 export type LeadScore = {
   id: string;
@@ -251,7 +282,7 @@ export type Task = {
 /** Row of the `pending_reminders` view: open tasks plus note reminders. */
 export type PendingReminder = {
   id: string;
-  kind: 'task' | 'note';
+  kind: 'task' | 'note' | 'subscription';
   organization_id: string;
   title: string;
   detail: string | null;
@@ -442,6 +473,22 @@ export interface Database {
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
       >;
+      subscriptions: TableDef<
+        Subscription,
+        [
+          FK<'subscriptions_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'subscriptions_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'subscriptions_deal_id_fkey', 'deal_id', 'deals'>,
+          FK<'subscriptions_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
+      subscription_services: TableDef<
+        SubscriptionService,
+        [
+          FK<'subscription_services_subscription_id_fkey', 'subscription_id', 'subscriptions'>,
+          FK<'subscription_services_service_id_fkey', 'service_id', 'services'>,
+        ]
+      >;
       scoring_weights: TableDef<
         ScoringWeights,
         [FK<'scoring_weights_organization_id_fkey', 'organization_id', 'organizations'>]
@@ -588,6 +635,7 @@ export interface Database {
       next_proposal_number: { Args: { p_organization_id: string }; Returns: string };
       current_org_id: { Args: Record<string, never>; Returns: string };
       is_admin: { Args: Record<string, never>; Returns: boolean };
+      advance_subscription_billing: { Args: { p_subscription_id: string }; Returns: string };
       set_user_role: { Args: { p_user_id: string; p_role: UserRole }; Returns: undefined };
       set_user_active: { Args: { p_user_id: string; p_is_active: boolean }; Returns: undefined };
     };
