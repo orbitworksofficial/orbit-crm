@@ -103,6 +103,19 @@ export type Contact = {
   updated_at: string;
 }
 
+export type PortalUser = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  last_seen_at: string | null;
+  invited_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type BillingCycle = 'monthly' | 'quarterly' | 'annual';
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled';
 
@@ -473,6 +486,14 @@ export interface Database {
         Service,
         [FK<'services_organization_id_fkey', 'organization_id', 'organizations'>]
       >;
+      portal_users: TableDef<
+        PortalUser,
+        [
+          FK<'portal_users_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'portal_users_contact_id_fkey', 'contact_id', 'contacts'>,
+          FK<'portal_users_invited_by_fkey', 'invited_by', 'profiles'>,
+        ]
+      >;
       subscriptions: TableDef<
         Subscription,
         [
@@ -635,6 +656,8 @@ export interface Database {
       next_proposal_number: { Args: { p_organization_id: string }; Returns: string };
       current_org_id: { Args: Record<string, never>; Returns: string };
       is_admin: { Args: Record<string, never>; Returns: boolean };
+      portal_contact_id: { Args: Record<string, never>; Returns: string };
+      is_portal_user: { Args: Record<string, never>; Returns: boolean };
       advance_subscription_billing: { Args: { p_subscription_id: string }; Returns: string };
       set_user_role: { Args: { p_user_id: string; p_role: UserRole }; Returns: undefined };
       set_user_active: { Args: { p_user_id: string; p_is_active: boolean }; Returns: undefined };

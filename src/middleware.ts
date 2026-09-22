@@ -2,7 +2,24 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /** Routes reachable without a session. Everything else requires auth. */
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/auth/callback'];
+const PUBLIC_ROUTES = [
+  '/login',
+  '/forgot-password',
+  '/reset-password',
+  '/auth/callback',
+  '/portal/login',
+];
+
+/**
+ * Client portal routes.
+ *
+ * An unauthenticated visitor here must be sent to the PORTAL login, not the
+ * staff one — a client bounced to /login sees an internal-looking page and
+ * assumes the link they were given is broken.
+ */
+function isPortalRoute(pathname: string): boolean {
+  return pathname === '/portal' || pathname.startsWith('/portal/');
+}
 
 /**
  * Runs on every matched request to:
@@ -29,8 +46,11 @@ export async function middleware(request: NextRequest) {
     const isPublic = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
     if (isPublic) return NextResponse.next({ request });
 
-    const redirectUrl = new URL('/login', request.url);
-    if (pathname !== '/') redirectUrl.searchParams.set('next', pathname);
+    const loginPath = isPortalRoute(pathname) ? '/portal/login' : '/login';
+    const redirectUrl = new URL(loginPath, request.url);
+    if (pathname !== '/' && !isPortalRoute(pathname)) {
+      redirectUrl.searchParams.set('next', pathname);
+    }
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -64,7 +84,10 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
 
   if (!user && !isPublicRoute) {
-    const redirectUrl = new URL('/login', request.url);
+    const redirectUrl = new URL(
+      isPortalRoute(pathname) ? '/portal/login' : '/login',
+      request.url,
+    );
     // Preserve the destination so login can return the user where they meant
     // to go. Only the path is kept, to avoid an open-redirect via ?next=.
     if (pathname !== '/') {
@@ -116,7 +139,10 @@ export async function middleware(request: NextRequest) {
       const idleMs = now - Number(lastSeenRaw);
       if (Number.isFinite(idleMs) && idleMs > idleTimeoutMinutes * 60_000) {
         await supabase.auth.signOut();
-        const redirectUrl = new URL('/login', request.url);
+        const redirectUrl = new URL(
+          isPortalRoute(pathname) ? '/portal/login' : '/login',
+          request.url,
+        );
         redirectUrl.searchParams.set('reason', 'timeout');
         const timeoutResponse = NextResponse.redirect(redirectUrl);
         timeoutResponse.cookies.delete('ow_last_seen');
@@ -131,9 +157,12 @@ export async function middleware(request: NextRequest) {
       path: '/',
     });
 
-    // Signed-in users have no reason to see the login page.
+    // Signed-in users have no reason to see a login page.
     if (pathname === '/login') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    if (pathname === '/portal/login') {
+      return NextResponse.redirect(new URL('/portal', request.url));
     }
   }
 

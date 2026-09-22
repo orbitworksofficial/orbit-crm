@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { redirect } from 'next/navigation';
 import { requireProfile } from '@/lib/auth';
+import { isPortalSession } from '@/lib/portal-auth';
 import { createClient } from '@/lib/supabase/server';
 import { signOut } from '../(auth)/actions';
 
@@ -11,6 +13,11 @@ import { signOut } from '../(auth)/actions';
  * every page in this group can assume a signed-in user.
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  // A client who lands on an internal URL would see an empty CRM — RLS returns
+  // nothing for them — which reads as broken rather than forbidden. Send them
+  // to the portal instead.
+  if (await isPortalSession()) redirect('/portal');
+
   const profile = await requireProfile();
   const supabase = await createClient();
 
