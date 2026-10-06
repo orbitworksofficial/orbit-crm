@@ -213,13 +213,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Could not record the lead.' }, { status: 500 });
   }
 
-  // Attach the form message as the opening note. author_id is null because no
-  // CRM user wrote it; the UI renders that as "Unknown user".
+  // Attach the message as the opening note. author_id is null because no CRM
+  // user wrote it; the UI renders that as "Unknown user".
+  //
+  // The heading names where the lead actually came from. A chatbot transcript
+  // labelled "Website enquiry" misleads whoever picks the lead up — they would
+  // expect a form submission and find a conversation.
   if (message) {
+    const sourceSlug = source ?? 'website_form';
+    const heading =
+      sourceSlug === 'ai_chatbot'
+        ? 'Chatbot conversation'
+        : sourceSlug === 'website_form'
+          ? 'Website enquiry'
+          : 'Enquiry';
+
     await supabase.from('notes').insert({
       contact_id: contact.id,
       organization_id: organizationId,
-      body: `Website enquiry:\n\n${message}`,
+      body: `${heading}:\n\n${message}`,
       author_id: null,
     });
   }
@@ -243,7 +255,12 @@ export async function POST(request: NextRequest) {
     organization_id: organizationId,
     contact_id: contact.id,
     event_type: 'contact.created',
-    description: 'Lead captured from the website contact form',
+    // Names the actual origin, so the activity timeline distinguishes a
+    // chatbot conversation from a form submission at a glance.
+    description:
+      (source ?? 'website_form') === 'ai_chatbot'
+        ? 'Lead captured by the AI chatbot'
+        : 'Lead captured from the website contact form',
     metadata: { source: source ?? 'website_form' },
     actor_id: null,
   });
