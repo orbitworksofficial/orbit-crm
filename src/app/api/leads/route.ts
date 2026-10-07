@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createInboundContact, resolveDefaultOrganization } from '@/lib/leads/intake';
 import { env } from '@/lib/env';
 
 /**
@@ -157,116 +158,50 @@ export async function POST(request: NextRequest) {
   }
 
   const { source, message, services, ...contactFields } = parsed.data;
+  const sourceSlug = source ?? 'website_form';
 
   // --- 4. Write ------------------------------------------------------------
   const supabase = createAdminClient();
 
   // Phase 1 has a single organization. When multi-tenancy lands, this resolves
   // from the API key presented by the caller instead.
-  const { data: organization, error: orgError } = await supabase
-    .from('organizations')
-    .select('id')
-    .order('created_at')
-    .limit(1)
-    .maybeSingle();
-
-  if (orgError || !organization) {
-    console.error('[api/leads] No organization found:', orgError);
+  const organizationId = await resolveDefaultOrganization(supabase);
+  if (!organizationId) {
+    console.error('[api/leads] No organization found.');
     return NextResponse.json({ error: 'CRM is not initialised.' }, { status: 500 });
   }
 
-  const organizationId = organization.id;
+  // The heading and description name where the lead actually came from, so the
+  // note and the activity timeline distinguish a chatbot conversation from a
+  // form submission at a glance. Chosen here rather than in the shared intake
+  // helper because the wording belongs to this endpoint's callers.
+  const heading =
+    sourceSlug === 'ai_chatbot'
+      ? 'Chatbot conversation'
+      : sourceSlug === 'website_form'
+        ? 'Website enquiry'
+        : 'Enquiry';
 
-  // Resolve the source and default status by slug so renaming a display label
-  // in Settings never breaks the website form.
-  const [{ data: leadSource }, { data: defaultStatus }] = await Promise.all([
-    supabase
-      .from('lead_sources')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('slug', source ?? 'website_form')
-      .maybeSingle(),
-    supabase
-      .from('lead_statuses')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('slug', 'new')
-      .maybeSingle(),
-  ]);
-
-  const { data: contact, error: insertError } = await supabase
-    .from('contacts')
-    .insert({
-      ...contactFields,
-      organization_id: organizationId,
-      lead_source_id: leadSource?.id ?? null,
-      lead_status_id: defaultStatus?.id ?? null,
-      // Deliberately unassigned: an admin triages inbound leads. Unassigned
-      // contacts are visible to admins only, per the contacts RLS policy.
-      assigned_to: null,
-    })
-    .select('id')
-    .single();
-
-  if (insertError || !contact) {
-    console.error('[api/leads] Insert failed:', insertError);
-    return NextResponse.json({ error: 'Could not record the lead.' }, { status: 500 });
-  }
-
-  // Attach the message as the opening note. author_id is null because no CRM
-  // user wrote it; the UI renders that as "Unknown user".
-  //
-  // The heading names where the lead actually came from. A chatbot transcript
-  // labelled "Website enquiry" misleads whoever picks the lead up — they would
-  // expect a form submission and find a conversation.
-  if (message) {
-    const sourceSlug = source ?? 'website_form';
-    const heading =
+  const result = await createInboundContact(supabase, {
+    organizationId,
+    contact: contactFields,
+    sourceSlug,
+    message,
+    noteHeading: heading,
+    serviceSlugs: services,
+    activityDescription:
       sourceSlug === 'ai_chatbot'
-        ? 'Chatbot conversation'
-        : sourceSlug === 'website_form'
-          ? 'Website enquiry'
-          : 'Enquiry';
-
-    await supabase.from('notes').insert({
-      contact_id: contact.id,
-      organization_id: organizationId,
-      body: `${heading}:\n\n${message}`,
-      author_id: null,
-    });
-  }
-
-  // Map service slugs to ids, ignoring any the catalogue does not recognise.
-  if (services && services.length > 0) {
-    const { data: matched } = await supabase
-      .from('services')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .in('slug', services);
-
-    if (matched && matched.length > 0) {
-      await supabase
-        .from('contact_services')
-        .insert(matched.map((service) => ({ contact_id: contact.id, service_id: service.id })));
-    }
-  }
-
-  await supabase.from('activity_log').insert({
-    organization_id: organizationId,
-    contact_id: contact.id,
-    event_type: 'contact.created',
-    // Names the actual origin, so the activity timeline distinguishes a
-    // chatbot conversation from a form submission at a glance.
-    description:
-      (source ?? 'website_form') === 'ai_chatbot'
         ? 'Lead captured by the AI chatbot'
         : 'Lead captured from the website contact form',
-    metadata: { source: source ?? 'website_form' },
-    actor_id: null,
+    activityMetadata: { source: sourceSlug },
   });
 
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 500 });
+  }
+
   // 201 with the id so the website can correlate its own submission record.
-  return NextResponse.json({ success: true, contact_id: contact.id }, { status: 201 });
+  return NextResponse.json({ success: true, contact_id: result.contactId }, { status: 201 });
 }
 
 /** Explicit 405 so a mistakenly-GET'd endpoint gives a clear answer. */
