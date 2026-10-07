@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import type { ResolvedRange } from '@/lib/date-range';
+import { campaignKey } from '@/lib/meta/types';
 
 /**
  * Dashboard and report metrics (brief §05, §07).
@@ -150,6 +151,18 @@ export interface CampaignRow {
   leads: number;
   won: number;
   revenue: number;
+  /**
+   * Ad spend matched to this row, or null when none is known.
+   *
+   * null and 0 mean different things and must render differently: null is "we
+   * have no spend data for this campaign", 0 is "it ran and cost nothing".
+   * Collapsing them would turn an unsynced campaign into a free one.
+   */
+  spend: number | null;
+  /** Cost per lead. Null when spend is unknown or no leads arrived. */
+  cpl: number | null;
+  /** Revenue divided by spend. Null when spend is unknown or zero. */
+  roas: number | null;
 }
 
 export interface AttributionMetrics {
@@ -161,19 +174,39 @@ export interface AttributionMetrics {
   untracked: number;
   /** True once any lead has ever carried a utm_source. Gates the whole panel. */
   hasData: boolean;
+  /** True once any ad spend overlaps the range. Gates the spend columns. */
+  hasSpend: boolean;
+  totalSpend: number;
+  /**
+   * When spend was last pulled from the ad platforms, or null if never.
+   *
+   * Surfaced because syncing is manual: an unlabelled ROAS figure computed
+   * from three-week-old spend is more misleading than showing none at all.
+   */
+  spendSyncedAt: string | null;
 }
 
 /**
- * Marketing attribution from the UTM tags captured on each contact.
- *
- * This is the Phase 1 half of the brief's Phase 2 "Ad Platform Integration":
- * it answers *which campaigns produce leads and revenue* using data the website
- * form already sends. What it cannot show is **spend**, and therefore ROAS —
- * those require pulling from the Meta and Google Ads APIs, which is Phase 2.
+ * Marketing attribution: which campaigns produce leads, revenue, and return.
  *
  * Revenue is attributed to the campaign that produced the contact, summed over
  * that contact's won deals. A deal is only counted once, against the campaign
  * of its own contact.
+ *
+ * Spend comes from `ad_spend`, matched on the campaign key. That join is the
+ * weak point and worth understanding before trusting a ROAS figure:
+ *
+ *   * Meta Lead Ads produce no click-through, so those contacts have no real
+ *     UTM parameters. The webhook synthesises `utm_campaign` from the campaign
+ *     name, and the insights sync derives `ad_spend.utm_campaign` from the same
+ *     name, both through `campaignKey`. The match works only because both sides
+ *     pass through that one function.
+ *   * Renaming a campaign in the ad platform therefore splits its history into
+ *     two rows, since old spend keeps the old key.
+ *
+ * The stable alternative is `contacts.meta_ad_id -> ad_spend.ad_id`; both
+ * columns exist and adding it as a second matching pass is the next
+ * improvement, not a rewrite.
  */
 export async function getAttributionMetrics(
   supabase: SupabaseClient<Database>,
@@ -216,8 +249,47 @@ export async function getAttributionMetrics(
     }
   }
 
-  /** Accumulates leads, wins, and revenue under a grouping key. */
-  function group(keyOf: (row: Row) => string | null): CampaignRow[] {
+  // Spend over the same period. Dates rather than timestamps, since ad_spend is
+  // daily.
+  let spendQuery = supabase
+    .from('ad_spend')
+    .select('platform, campaign_name, utm_campaign, spend');
+
+  if (range.from) spendQuery = spendQuery.gte('spend_date', range.from.slice(0, 10));
+  if (range.to) spendQuery = spendQuery.lt('spend_date', range.to.slice(0, 10));
+
+  const { data: spendRows } = await spendQuery;
+
+  // Which platform each row's money belongs to, in the vocabulary utm_source
+  // uses — so channel spend can be matched against it.
+  const PLATFORM_CHANNEL: Record<string, string> = {
+    meta: 'facebook',
+    google: 'google',
+    linkedin: 'linkedin',
+  };
+
+  const spendByCampaign = new Map<string, number>();
+  const spendByChannel = new Map<string, number>();
+  let totalSpend = 0;
+
+  for (const row of spendRows ?? []) {
+    const amount = Number(row.spend);
+    totalSpend += amount;
+
+    const campaign = row.utm_campaign ?? campaignKey(row.campaign_name);
+    if (campaign) {
+      spendByCampaign.set(campaign, (spendByCampaign.get(campaign) ?? 0) + amount);
+    }
+
+    const channel = PLATFORM_CHANNEL[row.platform] ?? row.platform;
+    spendByChannel.set(channel, (spendByChannel.get(channel) ?? 0) + amount);
+  }
+
+  /** Accumulates leads, wins, revenue, and spend under a grouping key. */
+  function group(
+    keyOf: (row: Row) => string | null,
+    spendFor: Map<string, number>,
+  ): CampaignRow[] {
     const map = new Map<string, CampaignRow>();
 
     for (const contact of contacts) {
@@ -232,6 +304,9 @@ export async function getAttributionMetrics(
           leads: 0,
           won: 0,
           revenue: 0,
+          spend: null,
+          cpl: null,
+          roas: null,
         };
         map.set(key, entry);
       }
@@ -241,6 +316,17 @@ export async function getAttributionMetrics(
       entry.revenue += revenueByContact.get(contact.id) ?? 0;
     }
 
+    for (const entry of map.values()) {
+      // Matched case-insensitively: utm tags arrive however they were typed
+      // into the ad, while campaignKey always lowercases.
+      const spend = spendFor.get(entry.label.toLowerCase());
+      if (spend === undefined) continue;
+
+      entry.spend = spend;
+      entry.cpl = entry.leads > 0 ? spend / entry.leads : null;
+      entry.roas = spend > 0 ? entry.revenue / spend : null;
+    }
+
     // Revenue first, then leads: a campaign that produced money outranks one
     // that produced only volume.
     return [...map.values()].sort(
@@ -248,15 +334,28 @@ export async function getAttributionMetrics(
     );
   }
 
-  const byChannel = group((row) => row.utm_source);
-  const byCampaign = group((row) => row.utm_campaign ?? row.utm_source);
+  const byChannel = group((row) => row.utm_source, spendByChannel);
+  const byCampaign = group((row) => row.utm_campaign ?? row.utm_source, spendByCampaign);
   const untracked = contacts.filter((row) => !row.utm_source).length;
+
+  // When spend was last pulled. Not period-bound: it describes the freshness of
+  // the numbers, not the period they cover.
+  const { data: synced } = await supabase
+    .from('ad_credentials')
+    .select('last_synced_at')
+    .not('last_synced_at', 'is', null)
+    .order('last_synced_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   return {
     byChannel,
     byCampaign,
     untracked,
     hasData: byChannel.length > 0,
+    hasSpend: totalSpend > 0,
+    totalSpend,
+    spendSyncedAt: synced?.last_synced_at ?? null,
   };
 }
 
@@ -347,4 +446,85 @@ export async function getTimeSeries(
   }
 
   return { points, bucket };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Meta funnel                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface MetaFunnelMetrics {
+  impressions: number;
+  clicks: number;
+  /** Leads Meta itself counted — form submissions on its side. */
+  platformLeads: number;
+  /** Contacts in the CRM sourced from Meta Lead Ads. */
+  crmLeads: number;
+  won: number;
+  spend: number;
+  /** False when there is nothing to show, so the panel can stay hidden. */
+  hasData: boolean;
+}
+
+/**
+ * The Meta funnel, from impressions through to won business.
+ *
+ * Deliberately reports Meta's own lead count alongside the CRM's rather than
+ * picking one. They measure different things — Meta counts form submissions,
+ * the CRM counts contacts that survived deduplication — and a gap between them
+ * is a signal worth seeing: it usually means a webhook delivery was missed,
+ * which is exactly what the Backfill button exists to repair.
+ */
+export async function getMetaFunnel(
+  supabase: SupabaseClient<Database>,
+  range: ResolvedRange,
+): Promise<MetaFunnelMetrics> {
+  let spendQuery = supabase
+    .from('ad_spend')
+    .select('impressions, clicks, platform_leads, spend')
+    .eq('platform', 'meta');
+
+  if (range.from) spendQuery = spendQuery.gte('spend_date', range.from.slice(0, 10));
+  if (range.to) spendQuery = spendQuery.lt('spend_date', range.to.slice(0, 10));
+
+  // Scoped by lead source slug rather than by utm_source: the slug is the
+  // contract, and a Lead Ads contact is identified by where it came from, not
+  // by a tag that could have been set by anything.
+  let leadQuery = supabase
+    .from('contacts')
+    .select('id, lead_source:lead_sources!inner(slug), lead_status:lead_statuses(is_won)')
+    .eq('lead_sources.slug', 'meta_lead_ads');
+
+  if (range.from) leadQuery = leadQuery.gte('created_at', range.from);
+  if (range.to) leadQuery = leadQuery.lt('created_at', range.to);
+
+  const [{ data: spendRows }, { data: leadRows }] = await Promise.all([
+    spendQuery,
+    leadQuery,
+  ]);
+
+  let impressions = 0;
+  let clicks = 0;
+  let platformLeads = 0;
+  let spend = 0;
+
+  for (const row of spendRows ?? []) {
+    impressions += Number(row.impressions);
+    clicks += Number(row.clicks);
+    platformLeads += Number(row.platform_leads);
+    spend += Number(row.spend);
+  }
+
+  type LeadRow = { lead_status: { is_won: boolean } | null };
+  const leads = (leadRows ?? []) as unknown as LeadRow[];
+  const won = leads.filter((lead) => lead.lead_status?.is_won).length;
+
+  return {
+    impressions,
+    clicks,
+    platformLeads,
+    crmLeads: leads.length,
+    won,
+    spend,
+    hasData: impressions > 0 || leads.length > 0,
+  };
 }

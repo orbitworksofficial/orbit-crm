@@ -1,20 +1,22 @@
 import { Card, CardHeader } from '@/components/ui/Card';
-import { formatCurrency, formatPercent, cn } from '@/lib/utils';
+import { formatCurrency, formatDateTime, formatPercent, cn } from '@/lib/utils';
 import type { AttributionMetrics, CampaignRow } from '@/lib/metrics';
 
 /**
  * Marketing attribution panel (dashboard).
  *
- * Shows which channels and campaigns produce leads and revenue, from the UTM
- * tags the website form already sends. Spend and ROAS are absent by design —
- * they require the Meta and Google Ads APIs, which the brief places in Phase 2.
- * The footnote says so, so nobody reads this as a complete ad report.
+ * Shows which channels and campaigns produce leads and revenue, and — once an
+ * ad platform is connected — what they cost and what they returned.
  *
  * Form: channels and campaigns are *nominal* categories — Google is not
  * "more" than Facebook — so every bar wears the same hue rather than one colour
  * per channel. Colouring them individually would spend the identity channel
  * re-encoding what the bar length already shows. Leads and revenue are two
  * different measures, so they get one hue each and never share an axis.
+ *
+ * Spend, CPL and ROAS go in a table rather than more bars. CPL and ROAS are
+ * ratios, not magnitudes, so a bar's length would imply a comparison that does
+ * not hold — and five bar charts side by side cannot be read anyway.
  */
 
 /** One row: label, a proportional bar, and its value direct-labelled. */
@@ -98,6 +100,13 @@ export function CampaignPanel({ metrics }: { metrics: AttributionMetrics }) {
   const totalTracked = metrics.byChannel.reduce((sum, row) => sum + row.leads, 0);
   const totalRevenue = metrics.byChannel.reduce((sum, row) => sum + row.revenue, 0);
 
+  // Only campaigns with matched spend: a row of em dashes teaches nothing, and
+  // an unmatched campaign is a join problem to fix in Settings, not a finding.
+  const spendRows = metrics.byCampaign
+    .filter((row) => row.spend !== null)
+    .sort((a, b) => (b.spend ?? 0) - (a.spend ?? 0))
+    .slice(0, 8);
+
   return (
     <Card>
       <CardHeader
@@ -160,6 +169,65 @@ export function CampaignPanel({ metrics }: { metrics: AttributionMetrics }) {
         </section>
       </div>
 
+      {/* --- Return on spend --- */}
+      {metrics.hasSpend && (
+        <section className="mt-6 pt-4 border-t border-[var(--border-subtle)]">
+          <h3 className="text-xs font-semibold text-[var(--text-secondary)] mb-2.5">
+            Cost and return by campaign
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[var(--text-muted)] text-left">
+                  <th scope="col" className="font-medium pb-1.5 pr-3">Campaign</th>
+                  <th scope="col" className="font-medium pb-1.5 px-2 text-right">Leads</th>
+                  <th scope="col" className="font-medium pb-1.5 px-2 text-right">Spend</th>
+                  <th scope="col" className="font-medium pb-1.5 px-2 text-right">Cost/lead</th>
+                  <th scope="col" className="font-medium pb-1.5 pl-2 text-right">Return</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-subtle)]">
+                {spendRows.map((row) => (
+                  <tr key={row.label}>
+                    <td className="py-1.5 pr-3 text-[var(--text-primary)]">{row.label}</td>
+                    <td className="py-1.5 px-2 text-right tabular text-[var(--text-secondary)]">
+                      {row.leads}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular text-[var(--text-secondary)]">
+                      {formatCurrency(row.spend ?? 0)}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular text-[var(--text-secondary)]">
+                      {/* An em dash, not a zero: no leads means cost per lead
+                          is undefined, not free. */}
+                      {row.cpl === null ? '—' : formatCurrency(row.cpl)}
+                    </td>
+                    <td className="py-1.5 pl-2 text-right tabular">
+                      {row.roas === null ? (
+                        <span className="text-[var(--text-muted)]">—</span>
+                      ) : (
+                        <span
+                          className={
+                            row.roas >= 1
+                              ? 'text-[var(--success)]'
+                              : 'text-[var(--text-secondary)]'
+                          }
+                        >
+                          {row.roas.toFixed(2)}×
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-2">
+            Return is closed revenue divided by spend, attributed to the campaign that
+            produced the lead. Campaigns with no spend data are not listed.
+          </p>
+        </section>
+      )}
+
       <div
         className={cn(
           'mt-5 pt-3 border-t border-[var(--border-subtle)]',
@@ -188,8 +256,22 @@ export function CampaignPanel({ metrics }: { metrics: AttributionMetrics }) {
             untagged
           </span>
         )}
+        {metrics.hasSpend && (
+          <span>
+            <span className="text-[var(--text-secondary)] font-medium tabular">
+              {formatCurrency(metrics.totalSpend)}
+            </span>{' '}
+            ad spend
+          </span>
+        )}
+        {/* Syncing is manual, so the figures carry their own age. An
+            unlabelled ROAS computed from stale spend is worse than none. */}
         <span className="ml-auto">
-          Ad spend and ROAS arrive with the Phase&nbsp;2 ad-platform integration.
+          {metrics.hasSpend
+            ? metrics.spendSyncedAt
+              ? `Ad spend as of ${formatDateTime(metrics.spendSyncedAt)}`
+              : 'Ad spend has not been synced yet.'
+            : 'Connect an ad platform in Settings to see spend and ROAS.'}
         </span>
       </div>
     </Card>

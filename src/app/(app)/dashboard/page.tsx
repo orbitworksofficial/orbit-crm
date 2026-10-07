@@ -8,10 +8,16 @@ import { ColumnChart } from '@/components/charts/ColumnChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { CampaignPanel } from '@/components/charts/CampaignPanel';
+import { MetaFunnelPanel } from '@/components/charts/MetaFunnelPanel';
 import { HotLeads, type HotLead } from '@/components/crm/HotLeads';
 import { DateRangeFilter } from './DateRangeFilter';
 import { LiveIndicator } from '@/components/realtime/LiveIndicator';
-import { getDashboardMetrics, getAttributionMetrics, getTimeSeries } from '@/lib/metrics';
+import {
+  getDashboardMetrics,
+  getAttributionMetrics,
+  getMetaFunnel,
+  getTimeSeries,
+} from '@/lib/metrics';
 import { resolveDateRange, parsePreset } from '@/lib/date-range';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 
@@ -32,10 +38,11 @@ export default async function DashboardPage({
 
   const range = resolveDateRange(parsePreset(params.range), params.from, params.to);
   // Both metric sets are independent, so they share one round trip.
-  const [metrics, attribution, series] = await Promise.all([
+  const [metrics, attribution, series, metaFunnel] = await Promise.all([
     getDashboardMetrics(supabase, range),
     getAttributionMetrics(supabase, range),
     getTimeSeries(supabase, range),
+    getMetaFunnel(supabase, range),
   ]);
 
   // Highest-scoring open leads. The scoring view already zeroes closed leads,
@@ -270,6 +277,12 @@ export default async function DashboardPage({
       {/* --- Marketing attribution --- */}
       <div className="mt-4">
         <CampaignPanel metrics={attribution} />
+      </div>
+
+      {/* Renders nothing until Meta has data, so an unconnected CRM shows no
+          empty platform-specific panel. */}
+      <div className="mt-4">
+        <MetaFunnelPanel metrics={metaFunnel} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 mt-4">
