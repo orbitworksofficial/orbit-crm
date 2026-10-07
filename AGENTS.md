@@ -32,11 +32,22 @@ feature that needs them.
 
 ## Traps already hit here — do not re-learn these
 
-**supabase-js types:** row types must be `type` aliases, never `interface`. Interfaces
-lack an implicit index signature and fail the `Record<string, unknown>` constraint.
-`Relationships` arrays must declare the real foreign keys or embedded selects fail at
-runtime with "could not find the relation". `src/lib/supabase/database.types.ts` is
-hand-maintained.
+**Any type assigned to a `Record<...>` must be a `type` alias, never an `interface`.**
+Interfaces have no implicit index signature, so they fail the constraint. This bites row
+types in `database.types.ts` and anything stored in a jsonb column (see `MetaConfig` in
+`src/lib/meta/types.ts`) — not just rows. `Relationships` arrays must declare the real
+foreign keys or embedded selects fail at runtime with "could not find the relation".
+`src/lib/supabase/database.types.ts` is hand-maintained.
+
+**A Postgres unique constraint treats NULLs as distinct,** so a key over nullable columns
+lets "the same" row insert repeatedly. `ad_spend` uses a generated `grain_key` that
+coalesces absent levels to `''` rather than relying on Postgres 15's
+`nulls not distinct`. Check this whenever an upsert target includes a nullable column.
+
+**Server actions cannot be driven by curl** — the action id is not discoverable and the
+forged session cookie is rejected. To verify an action end to end, exercise the same
+code path from a script against the live database instead. Do not widen the middleware
+matcher to expose a test route; that trades the security boundary for test convenience.
 
 **Never key session freshness off `last_sign_in_at`.** Supabase updates it on every
 token refresh, so an idle timeout built on it never fires. Use the token `iat` claim.
