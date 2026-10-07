@@ -201,8 +201,11 @@ export type AdCredential = {
    * Non-secret platform identifiers — for Meta: pixel_id, page_id, app_id.
    * They appear in the platform's own UI, so they are stored in the clear and
    * can be shown back to the user.
+   *
+   * Loosely typed because each platform stores a different set; callers narrow
+   * it to their own shape (see MetaConfig).
    */
-  config: Record<string, string>;
+  config: Record<string, string | undefined>;
   /** Ciphertext. HMAC key for verifying Meta's webhook signatures. */
   app_secret_encrypted: string | null;
   /** Ciphertext. A different credential from access_token — the Conversions

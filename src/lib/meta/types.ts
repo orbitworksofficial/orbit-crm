@@ -18,15 +18,22 @@ export const META_API_VERSION = 'v23.0';
 
 export const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 
-/** The non-secret identifiers stored in ad_credentials.config. */
-export interface MetaConfig {
+/**
+ * The non-secret identifiers stored in ad_credentials.config.
+ *
+ * A `type` rather than an `interface`: interfaces have no implicit index
+ * signature, so an interface here cannot be assigned to the column's
+ * Record type — the same constraint that applies to the row types in
+ * database.types.ts.
+ */
+export type MetaConfig = {
   /** Dataset/Pixel id — the Conversions API posts events to it. */
   pixel_id?: string;
   /** The Facebook Page whose lead forms we receive. Identifies the credential
    *  on inbound webhooks, which carry no other usable key. */
   page_id?: string;
   app_id?: string;
-}
+};
 
 /**
  * The webhook POST body.

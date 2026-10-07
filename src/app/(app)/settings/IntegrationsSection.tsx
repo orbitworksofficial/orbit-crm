@@ -41,17 +41,10 @@ interface PlatformSpec {
   helpUrl: string;
 }
 
+// Meta is deliberately absent: it needs three separate secrets and four
+// identifiers, which this two-field form cannot express, so it has its own
+// card above (MetaIntegrationCard).
 const PLATFORMS: PlatformSpec[] = [
-  {
-    platform: 'meta',
-    name: 'Meta Ads',
-    accountLabel: 'Ad Account ID',
-    accountPlaceholder: 'act_1234567890',
-    tokenLabel: 'System User access token',
-    needsRefreshToken: false,
-    help: 'Business Settings → System Users → Generate token, with the ads_read permission.',
-    helpUrl: 'https://business.facebook.com/settings/system-users',
-  },
   {
     platform: 'google',
     name: 'Google Ads',
@@ -260,7 +253,7 @@ export function IntegrationsSection({
   return (
     <Card>
       <CardHeader
-        title="Ad platform integrations"
+        title="Other ad platforms"
         description="Connect ad accounts to pull spend into the CRM."
       />
 

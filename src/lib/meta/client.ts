@@ -320,6 +320,33 @@ export async function sendConversionEvent(
   return { httpStatus: response.status, body };
 }
 
+/**
+ * GET /{page_id}/leadgen_forms — the Page's lead forms.
+ *
+ * Discovered rather than configured: a marketer creating a new form should not
+ * have to register it in the CRM before its leads can be recovered.
+ */
+export async function fetchPageLeadForms(
+  pageId: string,
+  token: string,
+): Promise<{ id: string; name?: string }[]> {
+  const collected: { id: string; name?: string }[] = [];
+  let next: string | null = null;
+  let page = 0;
+
+  do {
+    const result: { data?: { id: string; name?: string }[]; paging?: { next?: string } } = next
+      ? await fetchAbsolute(next, token)
+      : await graph(`${pageId}/leadgen_forms`, { fields: 'id,name', limit: '100' }, token);
+
+    collected.push(...(result.data ?? []));
+    next = result.paging?.next ?? null;
+    page += 1;
+  } while (next && page < MAX_PAGES);
+
+  return collected;
+}
+
 /** GET /act_{id}?fields=name — the cheapest call that proves the ads token
  *  works and names the account it reaches. */
 export async function fetchAdAccountName(
