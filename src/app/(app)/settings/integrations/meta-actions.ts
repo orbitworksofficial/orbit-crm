@@ -17,6 +17,7 @@ import {
   fetchAdAccountName,
   fetchFormLeads,
   fetchInsights,
+  fetchPageAccessToken,
   fetchPageLeadForms,
   fetchPixelName,
 } from '@/lib/meta/client';
@@ -295,6 +296,47 @@ export async function testMetaConnection(): Promise<MetaTestResult> {
     }
   }
 
+  // Lead forms are checked separately from the ads token because they fail for
+  // their own reason: the endpoint needs a Page token, which only works if the
+  // system user was granted access to the Page itself.
+  const pageId = credential.config.page_id;
+  if (!pageId) {
+    checks.push({
+      label: 'Lead forms',
+      ok: false,
+      detail: 'No Page ID set, so lead forms cannot be found.',
+    });
+  } else if (!credential.adsToken) {
+    checks.push({ label: 'Lead forms', ok: false, detail: 'No ads token set.' });
+  } else {
+    try {
+      const pageToken = await fetchPageAccessToken(pageId, credential.adsToken);
+      if (!pageToken) {
+        checks.push({
+          label: 'Lead forms',
+          ok: false,
+          detail:
+            'The token does not administer that Page. Grant the system user access to it in Business Settings.',
+        });
+      } else {
+        const forms = await fetchPageLeadForms(pageId, pageToken);
+        checks.push({
+          label: 'Lead forms',
+          ok: true,
+          detail:
+            forms.length === 0
+              ? 'Page reached, but it has no lead forms yet.'
+              : `Found ${forms.length} lead form${forms.length === 1 ? '' : 's'}: ${forms
+                  .map((f) => f.name ?? f.id)
+                  .slice(0, 3)
+                  .join(', ')}.`,
+        });
+      }
+    } catch (cause) {
+      checks.push({ label: 'Lead forms', ok: false, detail: describeMetaError(cause) });
+    }
+  }
+
   checks.push(
     credential.appSecret
       ? { label: 'App secret', ok: true, detail: 'Stored. Inbound webhooks can be verified.' }
@@ -429,11 +471,28 @@ export async function backfillMetaLeads(days: MetaSyncWindow): Promise<{
 
   const sinceUnix = Math.floor((Date.now() - days * 86_400_000) / 1000);
 
+  // Lead endpoints reject a system user token outright, so everything below
+  // runs on a Page token obtained from it.
+  let pageToken: string | null;
+  try {
+    pageToken = await fetchPageAccessToken(pageId, credential.adsToken);
+  } catch (cause) {
+    return { ok: false, message: describeMetaError(cause) };
+  }
+
+  if (!pageToken) {
+    return {
+      ok: false,
+      message:
+        'Could not get a Page access token. Check that the system user has been granted access to that Page in Business Settings.',
+    };
+  }
+
   // The forms are discovered rather than configured: a marketer creating a new
   // form should not have to add it here for its leads to arrive.
   let forms: { id: string; name?: string }[];
   try {
-    forms = await fetchPageLeadForms(pageId, credential.adsToken);
+    forms = await fetchPageLeadForms(pageId, pageToken);
   } catch (cause) {
     return { ok: false, message: describeMetaError(cause) };
   }
@@ -449,7 +508,7 @@ export async function backfillMetaLeads(days: MetaSyncWindow): Promise<{
   for (const form of forms) {
     let leads;
     try {
-      leads = await fetchFormLeads(form.id, credential.adsToken, sinceUnix);
+      leads = await fetchFormLeads(form.id, pageToken, sinceUnix);
     } catch (cause) {
       failures.push(`${form.name ?? form.id}: ${describeMetaError(cause)}`);
       continue;

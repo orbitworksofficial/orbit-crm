@@ -321,10 +321,38 @@ export async function sendConversionEvent(
 }
 
 /**
+ * Exchanges a user or system-user token for a Page access token.
+ *
+ * Lead form endpoints refuse a user token outright — "(#190) This method must
+ * be called with a Page Access Token" — so every lead read has to go through
+ * this first. The Page tokens come back inside /me/accounts, which lists the
+ * Pages the caller administers.
+ *
+ * Returns null when the caller does not administer that Page, which is a
+ * configuration problem worth reporting rather than retrying.
+ */
+export async function fetchPageAccessToken(
+  pageId: string,
+  token: string,
+): Promise<string | null> {
+  const result = await graph<{ data?: { id: string; access_token?: string }[] }>(
+    'me/accounts',
+    { fields: 'id,name,access_token', limit: '100' },
+    token,
+  );
+
+  const page = (result.data ?? []).find((entry) => entry.id === pageId);
+  return page?.access_token ?? null;
+}
+
+/**
  * GET /{page_id}/leadgen_forms — the Page's lead forms.
  *
  * Discovered rather than configured: a marketer creating a new form should not
  * have to register it in the CRM before its leads can be recovered.
+ *
+ * `token` must be a Page access token (see fetchPageAccessToken), not the
+ * system user token.
  */
 export async function fetchPageLeadForms(
   pageId: string,

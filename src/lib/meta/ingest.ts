@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createInboundContact } from '@/lib/leads/intake';
 import type { Database } from '@/lib/supabase/database.types';
-import { fetchLead } from './client';
+import { fetchLead, fetchPageAccessToken } from './client';
 import { normalizeLead } from './normalize';
 import { campaignKey, type MetaLead } from './types';
 import type { MetaCredential } from './credentials';
@@ -102,7 +102,19 @@ export async function fetchAndIngestMetaLead(
   }
 
   try {
-    const lead = await fetchLead(leadgenId, credential.adsToken);
+    // Reading a lead requires a Page access token: Meta rejects a system user
+    // token on this endpoint with "(#190) This method must be called with a
+    // Page Access Token". The Page token is derived from the stored one rather
+    // than stored separately, so there is nothing extra to keep in sync.
+    const pageId = credential.config.page_id;
+    let token = credential.adsToken;
+
+    if (pageId) {
+      const pageToken = await fetchPageAccessToken(pageId, credential.adsToken);
+      if (pageToken) token = pageToken;
+    }
+
+    const lead = await fetchLead(leadgenId, token);
     return await ingestMetaLead(supabase, credential, lead);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : 'Unknown error';
