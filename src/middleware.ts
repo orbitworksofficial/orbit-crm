@@ -173,11 +173,16 @@ export const config = {
   matcher: [
     /*
      * Match all paths except:
-     *   - /api/leads      public website form intake (own auth via shared secret)
-     *   - _next/static    build assets
-     *   - _next/image     image optimiser
+     *   - /api/leads        public website form intake (own auth via shared secret)
+     *   - /api/meta/webhook Meta lead delivery. Meta's verification GET and its
+     *                       signed POSTs carry no session, so a redirect to
+     *                       /login here would make the endpoint unverifiable.
+     *                       It authenticates itself: the verify token on GET,
+     *                       an HMAC signature on POST.
+     *   - _next/static      build assets
+     *   - _next/image       image optimiser
      *   - favicon / images
      */
-    '/((?!api/leads|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api/leads|api/meta/webhook|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
