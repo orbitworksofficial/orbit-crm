@@ -12,6 +12,8 @@ import { DocumentPanel, type DocumentRow } from '@/components/crm/DocumentPanel'
 import { ScoreBreakdown } from '@/components/crm/LeadScore';
 import type { LeadScore, ScoringWeights } from '@/lib/supabase/database.types';
 import { Timeline } from './Timeline';
+import { StatusActions } from './StatusActions';
+import { humanizeFieldName } from '@/lib/meta/normalize';
 import { addContactNote } from '../actions';
 
 export const metadata: Metadata = { title: 'Contact' };
@@ -59,6 +61,7 @@ export default async function ContactDetailPage({
     { data: documents },
     { data: leadScore },
     { data: weights },
+    { data: statuses },
   ] = await Promise.all([
     supabase
       .from('deals')
@@ -87,7 +90,19 @@ export default async function ContactDetailPage({
       .select('*')
       .eq('organization_id', profile.organization_id)
       .maybeSingle<ScoringWeights>(),
+    supabase
+      .from('lead_statuses')
+      .select('id, name')
+      .eq('organization_id', profile.organization_id)
+      .eq('is_active', true)
+      .order('sort_order'),
   ]);
+
+  // Object.entries on a jsonb column: the keys are whatever the source form
+  // sent, so there is nothing to destructure against.
+  const formResponses = Object.entries(
+    (contact.custom_fields ?? {}) as Record<string, string>,
+  ).filter(([, value]) => value !== null && value !== '');
 
   const documentRows: DocumentRow[] = (documents ?? []).map((d) => ({
     ...d,
@@ -120,7 +135,18 @@ export default async function ContactDetailPage({
         {/* --- Left column: details --- */}
         <div className="lg:col-span-1 flex flex-col gap-4">
           <Card>
-            <CardHeader title="Details" />
+            <CardHeader
+              title="Details"
+              // Won and lost are what the CRM feeds back to Meta, so the path
+              // to setting them is kept short enough to actually get used.
+              action={
+                <StatusActions
+                  contactId={contact.id}
+                  currentStatusId={contact.lead_status_id}
+                  statuses={statuses ?? []}
+                />
+              }
+            />
             <dl>
               <DetailRow
                 label="Status"
@@ -133,6 +159,9 @@ export default async function ContactDetailPage({
                 }
               />
               <DetailRow label="Source" value={contact.lead_source?.name} />
+              {contact.meta_form_name && (
+                <DetailRow label="Meta form" value={contact.meta_form_name} />
+              )}
               <DetailRow
                 label="Email"
                 value={
@@ -187,6 +216,23 @@ export default async function ContactDetailPage({
                   completeness: weights.weight_completeness,
                 }}
               />
+            </Card>
+          )}
+
+          {/* Answers to questions the CRM has no column for — Meta Lead Ads
+              forms are edited per campaign, so these vary by lead. Shown
+              whatever they are, rather than only the ones we recognise. */}
+          {formResponses.length > 0 && (
+            <Card>
+              <CardHeader
+                title="Form responses"
+                description="Answers as the lead gave them."
+              />
+              <dl>
+                {formResponses.map(([name, value]) => (
+                  <DetailRow key={name} label={humanizeFieldName(name)} value={value} />
+                ))}
+              </dl>
             </Card>
           )}
 

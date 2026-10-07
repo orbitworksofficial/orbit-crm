@@ -237,3 +237,58 @@ export async function deleteNote(noteId: string, contactId: string) {
 
   revalidatePath(`/contacts/${contactId}`);
 }
+
+/**
+ * Quick lead-status change from the contact detail page.
+ *
+ * Exists so marking a lead won or lost does not mean opening the full edit
+ * form — and because those two outcomes are what the CRM feeds back to Meta,
+ * so the path has to be short enough that salespeople actually use it.
+ */
+export async function setContactStatus(contactId: string, statusId: string) {
+  const profile = await requireProfile();
+  const supabase = await createClient();
+
+  const { data: updated, error } = await supabase
+    .from('contacts')
+    .update({ lead_status_id: statusId })
+    .eq('id', contactId)
+    .select(
+      'id, organization_id, meta_lead_id, meta_created_at, lead_status:lead_statuses(name, is_won, is_lost)',
+    )
+    .single();
+
+  if (error || !updated) {
+    throw new Error(`Could not update the lead status: ${error?.message ?? 'not found'}`);
+  }
+
+  const leadStatus = updated.lead_status as unknown as {
+    name: string;
+    is_won: boolean;
+    is_lost: boolean;
+  } | null;
+
+  await supabase.from('activity_log').insert({
+    organization_id: profile.organization_id,
+    contact_id: contactId,
+    event_type: 'contact.status_changed',
+    description: `Lead status changed to ${leadStatus?.name ?? 'unknown'}`,
+    actor_id: profile.id,
+  });
+
+  // Tells Meta whether this lead was worth having, when it came from Meta.
+  // Failures are logged rather than thrown: a Meta outage must not stop a
+  // salesperson recording what happened.
+  const { queueMetaFeedback } = await import('@/lib/meta/feedback');
+  await queueMetaFeedback(supabase, {
+    id: updated.id,
+    organization_id: updated.organization_id,
+    meta_lead_id: updated.meta_lead_id,
+    meta_created_at: updated.meta_created_at,
+    leadStatus,
+  });
+
+  revalidatePath(`/contacts/${contactId}`);
+  revalidatePath('/contacts');
+  revalidatePath('/dashboard');
+}
