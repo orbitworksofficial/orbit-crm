@@ -19,7 +19,7 @@ import {
   fetchInsights,
   fetchPageAccessToken,
   fetchPageLeadForms,
-  fetchPixelName,
+  sendConversionEvent,
 } from '@/lib/meta/client';
 import { ingestMetaLead } from '@/lib/meta/ingest';
 import { campaignKey, type MetaConfig } from '@/lib/meta/types';
@@ -252,6 +252,52 @@ function describeMetaError(cause: unknown): string {
  * checked separately because they fail independently: the Conversions API
  * token can be valid while the ads token is still waiting on App Review.
  */
+/**
+ * Proves the Conversions API credentials work by attempting a send.
+ *
+ * Meta validates in order: token, then dataset, then the event body. Posting a
+ * deliberately invalid lead id therefore separates "the credentials are wrong"
+ * from "the credentials are right" — reaching the lead-id complaint means
+ * everything before it was accepted. The event is rejected, so nothing lands
+ * against the account.
+ *
+ * Subcode 2804036 is Meta's "invalid lead ID", which is the success signal here.
+ */
+async function probeConversionsApi(
+  pixelId: string,
+  capiToken: string,
+): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const result = await sendConversionEvent({
+      pixelId,
+      capiToken,
+      eventName: 'Qualified',
+      eventTime: Math.floor(Date.now() / 1000),
+      eventId: `connection-test:${Date.now()}`,
+      // Not a real lead id, and deliberately so — see above.
+      leadId: '0',
+    });
+
+    if (result.httpStatus >= 200 && result.httpStatus < 300) {
+      return { ok: true, detail: 'Reached the dataset and the event was accepted.' };
+    }
+
+    const error = (result.body as { error?: { error_subcode?: number; message?: string } } | null)
+      ?.error;
+
+    if (error?.error_subcode === 2804036) {
+      return {
+        ok: true,
+        detail: 'Token and dataset accepted. Feedback will send when a lead is won or lost.',
+      };
+    }
+
+    return { ok: false, detail: error?.message ?? `Meta returned ${result.httpStatus}.` };
+  } catch (cause) {
+    return { ok: false, detail: describeMetaError(cause) };
+  }
+}
+
 export async function testMetaConnection(): Promise<MetaTestResult> {
   const profile = await requireAdmin();
   const supabase = await createClient();
@@ -288,12 +334,17 @@ export async function testMetaConnection(): Promise<MetaTestResult> {
         : 'No Conversions API token set.',
     });
   } else {
-    try {
-      const name = await fetchPixelName(pixelId, credential.capiToken);
-      checks.push({ label: 'Conversions API', ok: true, detail: `Reached dataset "${name}".` });
-    } catch (cause) {
-      checks.push({ label: 'Conversions API', ok: false, detail: describeMetaError(cause) });
-    }
+    // Checked by SENDING, not by reading. A Conversions API token is scoped to
+    // posting events and is normally not granted read access to the dataset, so
+    // reading its name reports "Missing Permission" on a token that works
+    // perfectly — which reads as broken when it is not.
+    //
+    // The probe posts a deliberately invalid lead id. Meta validates the token
+    // and the dataset BEFORE the lead id, so being rejected specifically on the
+    // lead id proves everything up to that point is right. Nothing is recorded
+    // against the account, because the event is refused.
+    const probe = await probeConversionsApi(pixelId, credential.capiToken);
+    checks.push({ label: 'Conversions API', ...probe });
   }
 
   // Lead forms are checked separately from the ads token because they fail for

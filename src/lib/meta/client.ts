@@ -386,8 +386,8 @@ export async function fetchAdAccountName(
   return result.name ?? account;
 }
 
-/** GET /{pixel_id}?fields=name — proves the Conversions API token works. */
-export async function fetchPixelName(pixelId: string, token: string): Promise<string> {
-  const result = await graph<{ name?: string }>(pixelId, { fields: 'name' }, token);
-  return result.name ?? pixelId;
-}
+// There is deliberately no fetchPixelName here. A Conversions API token is
+// scoped to posting events and is not normally granted read access to its own
+// dataset, so reading the name returns "(#100) Missing Permission" on a token
+// that sends perfectly well. Verifying by sending is the only honest check —
+// see probeConversionsApi in the settings actions.
