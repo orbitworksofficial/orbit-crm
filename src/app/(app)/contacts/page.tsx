@@ -40,11 +40,18 @@ interface ContactRow {
   id: string;
   full_name: string;
   email: string | null;
+  whatsapp_number: string | null;
   company_name: string | null;
+  utm_campaign: string | null;
   created_at: string;
   lead_source: { id: string; name: string } | null;
   lead_status: { id: string; name: string; slug: string; is_won: boolean; is_lost: boolean } | null;
   assignee: { id: string; full_name: string } | null;
+}
+
+/** Strips a phone number down to what a tel: or wa.me link accepts. */
+function dialable(value: string): string {
+  return value.replace(/[^\d+]/g, '');
 }
 
 export default async function ContactsPage({
@@ -152,17 +159,15 @@ export default async function ContactsPage({
                   >
                     Name
                   </SortableTH>
-                  <SortableTH
-                    field="company_name"
-                    currentSort={sort}
-                    currentDir={params.dir}
-                    baseParams={params}
-                  >
-                    Company
-                  </SortableTH>
+                  {/* Phone rather than company: every Meta lead carries one and
+                      almost none carry a company name, so this is the column
+                      that actually helps someone pick up the lead. Company
+                      remains on the detail page. */}
+                  <TH>Phone</TH>
                   <TH>Status</TH>
                   <TH>Score</TH>
                   <TH>Source</TH>
+                  <TH>Campaign</TH>
                   <TH>Owner</TH>
                   <SortableTH
                     field="created_at"
@@ -191,7 +196,31 @@ export default async function ContactsPage({
                         </p>
                       )}
                     </TD>
-                    <TD className="text-[var(--text-secondary)]">{contact.company_name ?? '—'}</TD>
+                    <TD className="whitespace-nowrap">
+                      {contact.whatsapp_number ? (
+                        <span className="flex items-center gap-2">
+                          <a
+                            href={`tel:${dialable(contact.whatsapp_number)}`}
+                            className="text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors"
+                          >
+                            {contact.whatsapp_number}
+                          </a>
+                          {/* Most of these leads arrive from Meta with a mobile
+                              number, and WhatsApp is how they get contacted. */}
+                          <a
+                            href={`https://wa.me/${dialable(contact.whatsapp_number).replace(/^\+/, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-[var(--text-muted)] hover:text-[var(--success)] transition-colors"
+                            title="Open in WhatsApp"
+                          >
+                            WA
+                          </a>
+                        </span>
+                      ) : (
+                        <span className="text-[var(--text-muted)]">—</span>
+                      )}
+                    </TD>
                     <TD>
                       {contact.lead_status ? (
                         <Badge tone={leadStatusTone(contact.lead_status)}>
@@ -216,6 +245,18 @@ export default async function ContactsPage({
                     </TD>
                     <TD className="text-[var(--text-secondary)] text-xs">
                       {contact.lead_source?.name ?? '—'}
+                    </TD>
+                    <TD className="text-[var(--text-secondary)] text-xs">
+                      {contact.utm_campaign ? (
+                        <span
+                          className="block truncate max-w-[150px]"
+                          title={contact.utm_campaign}
+                        >
+                          {contact.utm_campaign}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--text-muted)]">—</span>
+                      )}
                     </TD>
                     <TD className="text-[var(--text-secondary)] text-xs">
                       {contact.assignee?.full_name ?? (

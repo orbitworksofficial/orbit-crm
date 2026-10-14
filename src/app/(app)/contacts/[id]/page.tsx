@@ -162,6 +162,12 @@ export default async function ContactDetailPage({
               {contact.meta_form_name && (
                 <DetailRow label="Meta form" value={contact.meta_form_name} />
               )}
+              {/* The campaign that produced the lead. Shown for any source that
+                  carries one, not just Meta — it is how a lead is traced back
+                  to the spend that bought it. */}
+              {contact.utm_campaign && (
+                <DetailRow label="Campaign" value={contact.utm_campaign} />
+              )}
               <DetailRow
                 label="Email"
                 value={

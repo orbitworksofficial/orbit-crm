@@ -28,7 +28,7 @@ export type ContactListFilters = {
   [key: string]: string | undefined;
 };
 
-const CONTACT_SELECT = `id, full_name, email, whatsapp_number, company_name, industry, city, country, created_at,
+const CONTACT_SELECT = `id, full_name, email, whatsapp_number, company_name, industry, city, country, utm_campaign, created_at,
    lead_source:lead_sources(id, name),
    lead_status:lead_statuses(id, name, slug, is_won, is_lost),
    assignee:profiles!contacts_assigned_to_fkey(id, full_name)`;
