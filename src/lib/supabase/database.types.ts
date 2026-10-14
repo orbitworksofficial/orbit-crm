@@ -51,6 +51,8 @@ export type LeadSource = {
   organization_id: string;
   name: string;
   slug: string;
+  /** Whether leads from this source are handed to the Email Engine. */
+  triggers_outreach: boolean;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -112,6 +114,11 @@ export type Contact = {
   meta_ad_id: string | null;
   /** Meta's own creation time. The 28-day feedback window runs from here. */
   meta_created_at: string | null;
+  /** Set when the lead unsubscribes. Checked before any outreach is triggered,
+   *  so a re-import cannot resume emailing someone who opted out. */
+  do_not_contact: boolean;
+  do_not_contact_at: string | null;
+  do_not_contact_reason: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -186,7 +193,7 @@ export type ScoringWeights = {
   updated_at: string;
 };
 
-export type AdPlatform = 'meta' | 'google' | 'linkedin';
+export type AdPlatform = 'meta' | 'google' | 'linkedin' | 'email_engine';
 
 export type AdCredential = {
   id: string;
@@ -233,6 +240,32 @@ export type AdCredential = {
  * make an asynchronous failure visible, and to record why an event was
  * deliberately not sent — which is what `skipped` means.
  */
+export type OutreachStatus = 'pending' | 'accepted' | 'failed' | 'skipped';
+
+/**
+ * One row per lead handed to the Email Engine.
+ *
+ * `status` answers "did the CRM hand it over"; `stage` answers "what has the
+ * Engine done with it since". They are separate because a lead can be accepted
+ * and then go nowhere, and that is worth being able to see.
+ */
+export type EmailOutreach = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  status: OutreachStatus;
+  stage: string | null;
+  /** The failure, or for `skipped` rows the reason nothing was sent. */
+  error: string | null;
+  http_status: number | null;
+  last_event: Record<string, unknown> | null;
+  sent_at: string | null;
+  booked_at: string | null;
+  opted_out_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type MetaConversionEvent = {
   id: string;
   organization_id: string;
@@ -604,6 +637,13 @@ export interface Database {
         Update: Partial<Omit<AdSpendRow, 'grain_key'>>;
         Relationships: [FK<'ad_spend_organization_id_fkey', 'organization_id', 'organizations'>];
       };
+      email_outreach: TableDef<
+        EmailOutreach,
+        [
+          FK<'email_outreach_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'email_outreach_contact_id_fkey', 'contact_id', 'contacts'>,
+        ]
+      >;
       meta_conversion_events: TableDef<
         MetaConversionEvent,
         [

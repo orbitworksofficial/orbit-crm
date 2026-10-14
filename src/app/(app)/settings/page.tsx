@@ -9,6 +9,11 @@ import { LeadSourcesSection } from './LeadSourcesSection';
 import { UsersSection } from './UsersSection';
 import { IntegrationsSection } from './IntegrationsSection';
 import { MetaIntegrationCard } from './MetaIntegrationCard';
+import { EmailEngineCard } from './EmailEngineCard';
+import {
+  getEngineCallbackUrl,
+  type EngineSummary,
+} from './integrations/email-engine-actions';
 import {
   getWebhookUrl,
   type MetaCredentialSummary,
@@ -74,7 +79,7 @@ export default async function SettingsPage() {
   // Meta is excluded: it has its own card, because it needs three secrets and
   // four identifiers that the generic two-field form cannot express.
   const credentialSummaries: CredentialSummary[] = (credentials ?? [])
-    .filter((c) => c.platform !== 'meta')
+    .filter((c) => c.platform !== 'meta' && c.platform !== 'email_engine')
     .map((c) => ({
       platform: c.platform,
       accountId: c.account_id,
@@ -86,6 +91,24 @@ export default async function SettingsPage() {
     }));
 
   const metaRow = (credentials ?? []).find((c) => c.platform === 'meta') ?? null;
+
+  // The Email Engine shares ad_credentials but is not an ad platform, so it is
+  // kept out of that list and rendered in its own card.
+  const engineRow = (credentials ?? []).find((c) => c.platform === 'email_engine') ?? null;
+  const engineSummary: EngineSummary | null = engineRow
+    ? {
+        baseUrl: engineRow.account_id,
+        secretHint: engineRow.token_hint,
+        isActive: engineRow.is_active,
+        lastError: engineRow.last_error,
+        connectedAt: engineRow.created_at,
+        callbackUrl: '',
+      }
+    : null;
+
+  const outreachSources = (sources ?? [])
+    .filter((s) => s.triggers_outreach)
+    .map((s) => s.name);
 
   // The verify token is the one stored value the user has to be able to read,
   // since they paste it into Meta. Decrypted in a try/catch because a rotated
@@ -148,6 +171,12 @@ export default async function SettingsPage() {
         />
         <IntegrationsSection
           credentials={credentialSummaries}
+          encryptionReady={isEncryptionConfigured()}
+        />
+        <EmailEngineCard
+          engine={engineSummary}
+          callbackUrl={await getEngineCallbackUrl()}
+          outreachSources={outreachSources}
           encryptionReady={isEncryptionConfigured()}
         />
       </div>

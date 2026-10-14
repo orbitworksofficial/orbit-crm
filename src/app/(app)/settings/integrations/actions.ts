@@ -36,6 +36,10 @@ const PLATFORM_LABEL: Record<AdPlatform, string> = {
   meta: 'Meta Ads',
   google: 'Google Ads',
   linkedin: 'LinkedIn Ads',
+  // Not an ad platform, but stored alongside them: it needs the same encrypted
+  // credential, active flag and error field, and duplicating all of that for
+  // two values would be worse than the loose name.
+  email_engine: 'Email Engine',
 };
 
 const connectSchema = z.object({

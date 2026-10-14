@@ -11,6 +11,7 @@ import {
   createLeadSource,
   renameLeadSource,
   toggleLeadSourceActive,
+  toggleLeadSourceOutreach,
   type ActionState,
 } from './actions';
 import type { LeadSource } from '@/lib/supabase/database.types';
@@ -86,6 +87,27 @@ export function LeadSourcesSection({ sources }: { sources: LeadSource[] }) {
 
                 <div className="flex items-center gap-2 shrink-0">
                   {!source.is_active && <Badge tone="neutral">Hidden</Badge>}
+                  {source.triggers_outreach && <Badge tone="accent">Auto-email</Badge>}
+                  {/* The toggle lives on the source because the judgement
+                      differs per channel: a stranger who clicked an ad expects
+                      to hear from you, a referral from a friend does not. */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isPending}
+                    title={
+                      source.triggers_outreach
+                        ? 'Stop sending automated outreach to leads from this source'
+                        : 'Send automated outreach to new leads from this source'
+                    }
+                    onClick={() =>
+                      startTransition(async () => {
+                        await toggleLeadSourceOutreach(source.id, !source.triggers_outreach);
+                      })
+                    }
+                  >
+                    {source.triggers_outreach ? 'Stop emails' : 'Auto-email'}
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => setEditingId(source.id)}>
                     Rename
                   </Button>

@@ -179,10 +179,13 @@ export const config = {
      *                       /login here would make the endpoint unverifiable.
      *                       It authenticates itself: the verify token on GET,
      *                       an HMAC signature on POST.
+     *   - /api/email-engine Status callbacks from the Email Engine, which has
+     *                       no CRM session. Authenticates with the same shared
+     *                       secret the CRM signs its outbound calls with.
      *   - _next/static      build assets
      *   - _next/image       image optimiser
      *   - favicon / images
      */
-    '/((?!api/leads|api/meta/webhook|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api/leads|api/meta/webhook|api/email-engine|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

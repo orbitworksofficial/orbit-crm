@@ -171,5 +171,30 @@ export async function createInboundContact(
     actor_id: null,
   });
 
+  // Automated outreach, if this source calls for it. Placed here rather than
+  // in each caller so every inbound path gets it on the same terms — a lead
+  // that reaches the CRM by any route is followed up the same way.
+  //
+  // Imported lazily so the intake path does not pull in the Engine client, and
+  // its own errors are swallowed: a lead is worth more than an email, and
+  // failures are recorded in email_outreach rather than thrown.
+  try {
+    const { queueOutreach } = await import('@/lib/email-engine/outreach');
+    await queueOutreach(supabase, {
+      contactId,
+      organizationId,
+      fullName: contact.full_name,
+      email: contact.email ?? null,
+      companyName: contact.company_name ?? null,
+      message: message ?? null,
+      utmSource: contact.utm_source ?? null,
+      utmMedium: contact.utm_medium ?? null,
+      utmCampaign: contact.utm_campaign ?? null,
+      sourceSlug,
+    });
+  } catch (cause) {
+    console.error('[intake] Could not queue outreach:', cause);
+  }
+
   return { ok: true, contactId, duplicate: false };
 }

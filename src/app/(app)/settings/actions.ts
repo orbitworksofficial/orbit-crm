@@ -285,6 +285,22 @@ export async function toggleLeadSourceActive(sourceId: string, isActive: boolean
   revalidatePath('/settings');
 }
 
+/**
+ * Whether leads from this source get automated outreach.
+ *
+ * Per source rather than a global switch, because the judgement differs: a
+ * stranger who clicked an ad expects to hear from you, while a referral from a
+ * friend receiving an automated "thanks for your interest" reads badly.
+ */
+export async function toggleLeadSourceOutreach(sourceId: string, triggers: boolean) {
+  await requireAdmin();
+
+  const supabase = await createClient();
+  await supabase.from('lead_sources').update({ triggers_outreach: triggers }).eq('id', sourceId);
+
+  revalidatePath('/settings');
+}
+
 /* -------------------------------------------------------------------------- */
 /* User management                                                             */
 /* -------------------------------------------------------------------------- */
