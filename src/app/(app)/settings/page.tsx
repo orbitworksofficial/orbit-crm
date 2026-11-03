@@ -10,6 +10,11 @@ import { UsersSection } from './UsersSection';
 import { IntegrationsSection } from './IntegrationsSection';
 import { MetaIntegrationCard } from './MetaIntegrationCard';
 import { EmailEngineCard } from './EmailEngineCard';
+import { NotificationsCard } from './NotificationsCard';
+import type {
+  NotifySummary,
+  RecipientSummary,
+} from './integrations/notification-actions';
 import {
   getEngineCallbackUrl,
   type EngineSummary,
@@ -41,6 +46,7 @@ export default async function SettingsPage() {
     { data: sources },
     { data: users },
     { data: credentials },
+    { data: notificationRecipients },
     { data: portalUsers },
     { data: portalContacts },
   ] = await Promise.all([
@@ -49,6 +55,10 @@ export default async function SettingsPage() {
     supabase.from('lead_sources').select('*').order('sort_order'),
     supabase.from('profiles').select('*').order('full_name'),
     supabase.from('ad_credentials').select('*').order('platform').returns<AdCredential[]>(),
+    supabase
+      .from('notification_recipients')
+      .select('id, email, label, is_active')
+      .order('created_at'),
     supabase.from('portal_users').select('*').order('created_at').returns<PortalUser[]>(),
     supabase
       .from('contacts')
@@ -79,7 +89,10 @@ export default async function SettingsPage() {
   // Meta is excluded: it has its own card, because it needs three secrets and
   // four identifiers that the generic two-field form cannot express.
   const credentialSummaries: CredentialSummary[] = (credentials ?? [])
-    .filter((c) => c.platform !== 'meta' && c.platform !== 'email_engine')
+    .filter(
+      (c) =>
+        c.platform !== 'meta' && c.platform !== 'email_engine' && c.platform !== 'resend',
+    )
     .map((c) => ({
       platform: c.platform,
       accountId: c.account_id,
@@ -95,6 +108,29 @@ export default async function SettingsPage() {
   // The Email Engine shares ad_credentials but is not an ad platform, so it is
   // kept out of that list and rendered in its own card.
   const engineRow = (credentials ?? []).find((c) => c.platform === 'email_engine') ?? null;
+
+  const notifyRow = (credentials ?? []).find((c) => c.platform === 'resend') ?? null;
+  const notifySummary: NotifySummary | null = notifyRow
+    ? {
+        fromAddress: notifyRow.account_id,
+        keyHint: notifyRow.token_hint,
+        isActive: notifyRow.is_active,
+        lastError: notifyRow.last_error,
+      }
+    : null;
+
+  const recipientSummaries: RecipientSummary[] = (notificationRecipients ?? []).map((r) => ({
+    id: r.id,
+    email: r.email,
+    label: r.label,
+    isActive: r.is_active,
+  }));
+
+  const notifySources = (sources ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    notifyOnLead: s.notify_on_lead,
+  }));
   const engineSummary: EngineSummary | null = engineRow
     ? {
         baseUrl: engineRow.account_id,
@@ -171,6 +207,12 @@ export default async function SettingsPage() {
         />
         <IntegrationsSection
           credentials={credentialSummaries}
+          encryptionReady={isEncryptionConfigured()}
+        />
+        <NotificationsCard
+          settings={notifySummary}
+          recipients={recipientSummaries}
+          sources={notifySources}
           encryptionReady={isEncryptionConfigured()}
         />
         <EmailEngineCard

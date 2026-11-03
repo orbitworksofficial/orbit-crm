@@ -53,6 +53,9 @@ export type LeadSource = {
   slug: string;
   /** Whether leads from this source are handed to the Email Engine. */
   triggers_outreach: boolean;
+  /** Whether a new lead from this source alerts the team. Distinct from
+   *  triggers_outreach: that emails the lead, this emails us. */
+  notify_on_lead: boolean;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -193,7 +196,7 @@ export type ScoringWeights = {
   updated_at: string;
 };
 
-export type AdPlatform = 'meta' | 'google' | 'linkedin' | 'email_engine';
+export type AdPlatform = 'meta' | 'google' | 'linkedin' | 'email_engine' | 'resend';
 
 export type AdCredential = {
   id: string;
@@ -240,6 +243,31 @@ export type AdCredential = {
  * make an asynchronous failure visible, and to record why an event was
  * deliberately not sent — which is what `skipped` means.
  */
+export type NotificationRecipient = {
+  id: string;
+  organization_id: string;
+  email: string;
+  label: string | null;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type LeadNotificationStatus = 'sent' | 'failed' | 'skipped';
+
+export type LeadNotification = {
+  id: string;
+  organization_id: string;
+  contact_id: string;
+  status: LeadNotificationStatus;
+  /** Who it went to, kept so the log stays true after the list changes. */
+  recipients: string[];
+  /** The failure, or for `skipped` rows the reason nothing was sent. */
+  error: string | null;
+  provider_id: string | null;
+  created_at: string;
+};
+
 export type OutreachStatus = 'pending' | 'accepted' | 'failed' | 'skipped';
 
 /**
@@ -637,6 +665,20 @@ export interface Database {
         Update: Partial<Omit<AdSpendRow, 'grain_key'>>;
         Relationships: [FK<'ad_spend_organization_id_fkey', 'organization_id', 'organizations'>];
       };
+      notification_recipients: TableDef<
+        NotificationRecipient,
+        [
+          FK<'notification_recipients_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'notification_recipients_created_by_fkey', 'created_by', 'profiles'>,
+        ]
+      >;
+      lead_notifications: TableDef<
+        LeadNotification,
+        [
+          FK<'lead_notifications_organization_id_fkey', 'organization_id', 'organizations'>,
+          FK<'lead_notifications_contact_id_fkey', 'contact_id', 'contacts'>,
+        ]
+      >;
       email_outreach: TableDef<
         EmailOutreach,
         [

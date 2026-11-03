@@ -40,6 +40,7 @@ const PLATFORM_LABEL: Record<AdPlatform, string> = {
   // credential, active flag and error field, and duplicating all of that for
   // two values would be worse than the loose name.
   email_engine: 'Email Engine',
+  resend: 'Email notifications',
 };
 
 const connectSchema = z.object({

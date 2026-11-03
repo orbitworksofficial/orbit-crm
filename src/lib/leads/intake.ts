@@ -196,5 +196,36 @@ export async function createInboundContact(
     console.error('[intake] Could not queue outreach:', cause);
   }
 
+  // Tell the team. Separate from outreach above: that emails the lead, this
+  // emails us, and a source can warrant one without the other — a referral is
+  // worth knowing about but should not get automated sales mail.
+  try {
+    const { sendLeadAlert } = await import('@/lib/notifications/lead-alert');
+    const { data: sourceRow } = await supabase
+      .from('lead_sources')
+      .select('name')
+      .eq('organization_id', organizationId)
+      .eq('slug', sourceSlug)
+      .maybeSingle();
+
+    await sendLeadAlert(supabase, {
+      contactId,
+      organizationId,
+      fullName: contact.full_name,
+      email: contact.email ?? null,
+      phone: contact.whatsapp_number ?? null,
+      companyName: contact.company_name ?? null,
+      city: contact.city ?? null,
+      message: message ?? null,
+      campaign: contact.utm_campaign ?? null,
+      formName: contact.meta_form_name ?? null,
+      customFields: contact.custom_fields ?? {},
+      sourceSlug,
+      sourceName: sourceRow?.name ?? sourceSlug,
+    });
+  } catch (cause) {
+    console.error('[intake] Could not send the lead alert:', cause);
+  }
+
   return { ok: true, contactId, duplicate: false };
 }
