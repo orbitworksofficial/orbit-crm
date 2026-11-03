@@ -98,6 +98,17 @@ export default async function ContactDetailPage({
       .order('sort_order'),
   ]);
 
+  /**
+   * The opening enquiry: the note the intake path wrote when the lead arrived.
+   *
+   * Identified by having no author — a CRM user's note has one, an inbound
+   * enquiry does not. Pulled out of the timeline so it can lead the column
+   * rather than sit at the bottom of it.
+   */
+  const enquiry = (notes ?? []).find(
+    (n) => (n as { author_id: string | null }).author_id === null,
+  ) as { body: string; created_at: string } | undefined;
+
   // Object.entries on a jsonb column: the keys are whatever the source form
   // sent, so there is nothing to destructure against.
   const formResponses = Object.entries(
@@ -260,6 +271,22 @@ export default async function ContactDetailPage({
 
         {/* --- Right column: deals, notes, activity --- */}
         <div className="lg:col-span-2 flex flex-col gap-4">
+          {/* What they actually asked for, first.
+              It was only in the activity timeline at the bottom of this
+              column, which is the last place anyone looks — and it is the one
+              thing that decides how to open the conversation. */}
+          {enquiry && (
+            <Card>
+              <CardHeader
+                title="What they asked for"
+                description={`Submitted ${formatDateTime(enquiry.created_at)}`}
+              />
+              <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap">
+                {enquiry.body}
+              </p>
+            </Card>
+          )}
+
           <Card>
             <CardHeader
               title="Deals"
