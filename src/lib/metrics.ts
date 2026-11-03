@@ -528,3 +528,162 @@ export async function getMetaFunnel(
     hasData: impressions > 0 || leads.length > 0,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Campaign breakdown                                                          */
+/* -------------------------------------------------------------------------- */
+
+export interface CampaignBreakdown {
+  campaignId: string;
+  name: string;
+  /** The join key. Null when the campaign name slugified to nothing. */
+  key: string | null;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  /** Meta's own lead count, from the insights actions array. */
+  platformLeads: number;
+  /** Contacts in the CRM attributed to this campaign. */
+  crmLeads: number;
+  won: number;
+  revenue: number;
+  /** Null rather than zero when there is nothing to divide by. */
+  costPerLead: number | null;
+  roas: number | null;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+/**
+ * Every campaign that has spend or leads, built from what was synced.
+ *
+ * Nothing is configured: a campaign appears here because it appears in the
+ * data, so one created this morning shows up as soon as the sync has run. The
+ * CRM never holds a list of campaign names to keep in step.
+ *
+ * Reports Meta's lead count beside the CRM's rather than choosing. They count
+ * different things — Meta counts form submissions, the CRM counts contacts
+ * that survived deduplication — and a gap usually means an import was missed,
+ * which is worth seeing rather than hiding behind one number.
+ */
+export async function getCampaignBreakdown(
+  supabase: SupabaseClient<Database>,
+  range: ResolvedRange,
+): Promise<CampaignBreakdown[]> {
+  let spendQuery = supabase
+    .from('ad_spend')
+    .select('campaign_id, campaign_name, utm_campaign, spend, impressions, clicks, platform_leads, spend_date')
+    .eq('platform', 'meta');
+
+  if (range.from) spendQuery = spendQuery.gte('spend_date', range.from.slice(0, 10));
+  if (range.to) spendQuery = spendQuery.lt('spend_date', range.to.slice(0, 10));
+
+  let contactQuery = supabase
+    .from('contacts')
+    .select('id, utm_campaign, lead_status:lead_statuses(is_won)')
+    .not('utm_campaign', 'is', null);
+
+  if (range.from) contactQuery = contactQuery.gte('created_at', range.from);
+  if (range.to) contactQuery = contactQuery.lt('created_at', range.to);
+
+  const [{ data: spendRows }, { data: contactRows }] = await Promise.all([
+    spendQuery,
+    contactQuery,
+  ]);
+
+  type ContactRow = { id: string; utm_campaign: string | null; lead_status: { is_won: boolean } | null };
+  const contacts = (contactRows ?? []) as unknown as ContactRow[];
+
+  // Won revenue per contact, so it can be attributed to the campaign that
+  // produced them.
+  const revenueByContact = new Map<string, number>();
+  if (contacts.length > 0) {
+    const { data: deals } = await supabase
+      .from('deals')
+      .select('contact_id, value')
+      .eq('status', 'won')
+      .in('contact_id', contacts.map((c) => c.id));
+
+    for (const deal of deals ?? []) {
+      revenueByContact.set(
+        deal.contact_id,
+        (revenueByContact.get(deal.contact_id) ?? 0) + Number(deal.value),
+      );
+    }
+  }
+
+  const byKey = new Map<string, CampaignBreakdown>();
+
+  for (const row of spendRows ?? []) {
+    const key = row.utm_campaign ?? campaignKey(row.campaign_name) ?? row.campaign_id;
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = {
+        campaignId: row.campaign_id,
+        name: row.campaign_name || row.campaign_id,
+        key: row.utm_campaign,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        platformLeads: 0,
+        crmLeads: 0,
+        won: 0,
+        revenue: 0,
+        costPerLead: null,
+        roas: null,
+        firstSeen: row.spend_date,
+        lastSeen: row.spend_date,
+      };
+      byKey.set(key, entry);
+    }
+    entry.spend += Number(row.spend);
+    entry.impressions += Number(row.impressions);
+    entry.clicks += Number(row.clicks);
+    entry.platformLeads += Number(row.platform_leads);
+    if (row.spend_date < entry.firstSeen) entry.firstSeen = row.spend_date;
+    if (row.spend_date > entry.lastSeen) entry.lastSeen = row.spend_date;
+  }
+
+  for (const contact of contacts) {
+    const key = contact.utm_campaign;
+    if (!key) continue;
+
+    // A campaign with leads but no spend row still belongs here — organic
+    // reach, or spend that has not synced yet. Dropping it would hide leads.
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = {
+        campaignId: key,
+        name: key,
+        key,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        platformLeads: 0,
+        crmLeads: 0,
+        won: 0,
+        revenue: 0,
+        costPerLead: null,
+        roas: null,
+        firstSeen: '',
+        lastSeen: '',
+      };
+      byKey.set(key, entry);
+    }
+
+    entry.crmLeads += 1;
+    if (contact.lead_status?.is_won) entry.won += 1;
+    entry.revenue += revenueByContact.get(contact.id) ?? 0;
+  }
+
+  for (const entry of byKey.values()) {
+    const leads = entry.crmLeads || entry.platformLeads;
+    entry.costPerLead = entry.spend > 0 && leads > 0 ? entry.spend / leads : null;
+    entry.roas = entry.spend > 0 ? entry.revenue / entry.spend : null;
+  }
+
+  // Spend first: the campaign costing the most is the one to look at.
+  return [...byKey.values()].sort(
+    (a, b) => b.spend - a.spend || b.crmLeads - a.crmLeads,
+  );
+}

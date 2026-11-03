@@ -589,3 +589,41 @@ export async function backfillMetaLeads(days: MetaSyncWindow): Promise<{
     }`,
   };
 }
+
+/**
+ * One pull of everything Meta currently holds.
+ *
+ * Spend and leads were separate buttons, so keeping the CRM current meant
+ * remembering both — and a campaign created after setup appeared in neither
+ * until someone thought to press them. Spend stopped dead for three weeks that
+ * way while a new campaign ran.
+ *
+ * Nothing here is configured. Insights are pulled account-wide and lead forms
+ * are discovered from the Page, so a campaign or form created this morning is
+ * included this afternoon without anyone touching Settings.
+ */
+export async function syncMetaEverything(days: MetaSyncWindow = 30): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const [spend, leads] = await Promise.all([
+    syncMetaInsights(days),
+    backfillMetaLeads(days),
+  ]);
+
+  const parts: string[] = [];
+  if (spend.ok) parts.push(spend.message.replace(/\.$/, ''));
+  if (leads.ok) parts.push(leads.message.replace(/^Backfill complete — /, '').replace(/\.$/, ''));
+
+  const problems = [
+    ...(spend.ok ? [] : [`Spend: ${spend.message}`]),
+    ...(leads.ok ? [] : [`Leads: ${leads.message}`]),
+  ];
+
+  // Partial success is reported as success with the problem named: one half
+  // failing does not make the other half's data less real.
+  return {
+    ok: problems.length === 0,
+    message: [parts.join('. '), ...problems].filter(Boolean).join(' — '),
+  };
+}

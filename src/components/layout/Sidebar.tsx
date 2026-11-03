@@ -121,6 +121,16 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    href: '/campaigns',
+    label: 'Campaigns',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M3 11l18-5v12L3 13v-2z" />
+        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </svg>
+    ),
+  },
+  {
     href: '/reports',
     label: 'Reports',
     icon: (
