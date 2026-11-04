@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/Table';
 import { DateRangeFilter } from '../dashboard/DateRangeFilter';
 import { resolveDateRange, parsePreset } from '@/lib/date-range';
-import { getCampaignBreakdown } from '@/lib/metrics';
+import { getCampaignBreakdown, getSpendSeries } from '@/lib/metrics';
+import { SpendChart } from '@/components/charts/SpendChart';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 
 export const metadata: Metadata = { title: 'Campaigns' };
@@ -40,7 +41,10 @@ export default async function CampaignsPage({
   const supabase = await createClient();
 
   const range = resolveDateRange(parsePreset(params.range), params.from, params.to);
-  const campaigns = await getCampaignBreakdown(supabase, range);
+  const [campaigns, spendSeries] = await Promise.all([
+    getCampaignBreakdown(supabase, range),
+    getSpendSeries(supabase, range),
+  ]);
 
   // When spend was last pulled. Shown because a stale figure that looks
   // current is worse than an obviously missing one.
@@ -96,6 +100,14 @@ export default async function CampaignsPage({
               accent="success"
             />
           </div>
+
+          <Card className="mb-4">
+            <CardHeader
+              title="Spend, reach and leads"
+              description="Each measure on its own scale — they are not comparable to each other."
+            />
+            <SpendChart points={spendSeries} />
+          </Card>
 
           <Card>
             <CardHeader

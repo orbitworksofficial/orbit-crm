@@ -363,14 +363,21 @@ export async function getAttributionMetrics(
 /* Time series                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export interface TimePoint {
+/**
+ * A point on a time-series chart.
+ *
+ * A `type` rather than an `interface`: interfaces have no implicit index
+ * signature, so an interface here cannot be passed to a chart generic over its
+ * measure. The same constraint that applies to the Supabase row types.
+ */
+export type TimePoint = {
   /** ISO date at the start of the bucket. */
   date: string;
   /** Short display label, e.g. "12 Aug". */
   label: string;
   leads: number;
   revenue: number;
-}
+};
 
 /**
  * Leads and closed revenue bucketed over the selected range.
@@ -686,4 +693,78 @@ export async function getCampaignBreakdown(
   return [...byKey.values()].sort(
     (a, b) => b.spend - a.spend || b.crmLeads - a.crmLeads,
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Ad spend over time                                                          */
+/* -------------------------------------------------------------------------- */
+
+export type SpendPoint = {
+  date: string;
+  label: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+};
+
+/**
+ * Daily ad spend, impressions, clicks and leads.
+ *
+ * Every bucket in the range is emitted, zeroes included: a gap in a time
+ * series has to read as "nothing was spent", not as missing data, and a
+ * campaign that paused for three days is exactly the thing worth seeing.
+ */
+export async function getSpendSeries(
+  supabase: SupabaseClient<Database>,
+  range: ResolvedRange,
+): Promise<SpendPoint[]> {
+  let query = supabase
+    .from('ad_spend')
+    .select('spend_date, spend, impressions, clicks, platform_leads')
+    .order('spend_date');
+
+  if (range.from) query = query.gte('spend_date', range.from.slice(0, 10));
+  if (range.to) query = query.lt('spend_date', range.to.slice(0, 10));
+
+  const { data } = await query;
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  // Pre-seed every day between the first and last so gaps render as zero
+  // rather than as a straight line across missing days.
+  const first = rows[0].spend_date;
+  const last = rows[rows.length - 1].spend_date;
+  const points = new Map<string, SpendPoint>();
+
+  for (
+    let d = new Date(`${first}T00:00:00Z`);
+    d <= new Date(`${last}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1)
+  ) {
+    const key = d.toISOString().slice(0, 10);
+    points.set(key, {
+      date: key,
+      label: new Date(`${key}T00:00:00Z`).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        timeZone: 'UTC',
+      }),
+      spend: 0,
+      impressions: 0,
+      clicks: 0,
+      leads: 0,
+    });
+  }
+
+  for (const row of rows) {
+    const point = points.get(row.spend_date);
+    if (!point) continue;
+    point.spend += Number(row.spend);
+    point.impressions += Number(row.impressions);
+    point.clicks += Number(row.clicks);
+    point.leads += Number(row.platform_leads);
+  }
+
+  return [...points.values()];
 }

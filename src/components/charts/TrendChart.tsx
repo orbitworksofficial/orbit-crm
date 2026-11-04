@@ -20,8 +20,16 @@ import type { TimePoint } from '@/lib/metrics';
 
 const PAD = { top: 12, right: 12, bottom: 22, left: 46 };
 
-interface Series {
-  key: 'revenue' | 'leads';
+/** The minimum a point needs: a stable key, an axis label, and its measures. */
+export interface PlotPoint {
+  date: string;
+  label: string;
+  [measure: string]: string | number;
+}
+
+export interface Series {
+  /** Which measure on the point to plot. */
+  key: string;
   label: string;
   colorVar: string;
   format: (value: number) => string;
@@ -36,14 +44,21 @@ function niceMax(value: number): number {
   return step * magnitude;
 }
 
-function Panel({
+/**
+ * One measure plotted over time.
+ *
+ * Exported so other charts reuse it rather than duplicating 120 lines of SVG.
+ * Generic over the measure, because two measures of different magnitude must
+ * never share a y-axis — stacking panels is what keeps that rule enforceable.
+ */
+export function Panel({
   points,
   series,
   height,
   hovered,
   onHover,
 }: {
-  points: TimePoint[];
+  points: PlotPoint[];
   series: Series;
   height: number;
   hovered: number | null;
@@ -52,7 +67,7 @@ function Panel({
   const gradientId = useId();
   const width = 800; // viewBox units; the SVG scales to its container.
 
-  const values = points.map((p) => p[series.key]);
+  const values = points.map((p) => Number(p[series.key] ?? 0));
   const max = niceMax(Math.max(...values, 0));
 
   const plotW = width - PAD.left - PAD.right;
@@ -63,7 +78,10 @@ function Panel({
   const y = (v: number) => PAD.top + plotH - (max > 0 ? (v / max) * plotH : 0);
 
   const linePath = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p[series.key]).toFixed(1)}`)
+    .map(
+      (p, i) =>
+        `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(Number(p[series.key] ?? 0)).toFixed(1)}`,
+    )
     .join(' ');
 
   const areaPath =
@@ -162,7 +180,7 @@ function Panel({
           {/* 2px surface ring keeps the dot legible where it crosses the line. */}
           <circle
             cx={x(hovered)}
-            cy={y(points[hovered][series.key])}
+            cy={y(Number(points[hovered][series.key] ?? 0))}
             r="5"
             fill={`var(${series.colorVar})`}
             stroke="var(--surface-raised)"

@@ -182,12 +182,10 @@ export const config = {
      *   - /api/email-engine Status callbacks from the Email Engine, which has
      *                       no CRM session. Authenticates with the same shared
      *                       secret the CRM signs its outbound calls with.
-     *   - /api/cron         Scheduled jobs. Vercel calls these with no session,
-     *                       presenting CRON_SECRET as a bearer token.
      *   - _next/static      build assets
      *   - _next/image       image optimiser
      *   - favicon / images
      */
-    '/((?!api/leads|api/meta/webhook|api/email-engine|api/cron|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api/leads|api/meta/webhook|api/email-engine|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
