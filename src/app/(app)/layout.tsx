@@ -5,6 +5,7 @@ import { requireProfile } from '@/lib/auth';
 import { isPortalSession } from '@/lib/portal-auth';
 import { createClient } from '@/lib/supabase/server';
 import { signOut } from '../(auth)/actions';
+import { ensureSchedulerStarted } from '@/lib/scheduler-boot';
 
 /**
  * Layout for all authenticated routes.
@@ -13,6 +14,10 @@ import { signOut } from '../(auth)/actions';
  * every page in this group can assume a signed-in user.
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  // Starts the background Meta sync on the first request. Idempotent, and
+  // deliberately here rather than in instrumentation.ts — see that module.
+  ensureSchedulerStarted();
+
   // A client who lands on an internal URL would see an empty CRM — RLS returns
   // nothing for them — which reads as broken rather than forbidden. Send them
   // to the portal instead.
