@@ -15,9 +15,22 @@ import 'server-only';
  * Started from instrumentation.ts, which Next runs once per server process.
  */
 
-/** How often the sync runs. Hourly keeps spend current without hammering
- *  Meta's rate limit, which is generous but not unlimited. */
-const INTERVAL_MS = 60 * 60 * 1000;
+/**
+ * How often the sync runs.
+ *
+ * Ten minutes, because until the Meta webhook is subscribed this is the ONLY
+ * path a lead takes into the CRM — and at hourly, a lead arriving just after a
+ * run waited the better part of an hour before anyone was told.
+ *
+ * Comfortably inside Meta's rate limit: the lead endpoint allows roughly
+ * 200 x 24 x (leads in the last 90 days) calls per day, which is thousands
+ * here, and this makes a few dozen.
+ *
+ * Once the webhook is connected, leads arrive in seconds and this becomes the
+ * safety net rather than the delivery path, at which point a longer interval
+ * would be fine again.
+ */
+const INTERVAL_MS = 10 * 60 * 1000;
 
 /** Delay before the first run, so a deploy is not competing with a sync while
  *  the process is still warming up. */
@@ -76,5 +89,5 @@ export function startScheduler(): void {
     setInterval(tick, INTERVAL_MS).unref();
   }, STARTUP_DELAY_MS).unref();
 
-  console.log('[scheduler] Meta sync scheduled hourly.');
+  console.log('[scheduler] Meta sync scheduled every 10 minutes.');
 }
